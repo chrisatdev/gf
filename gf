@@ -1,7 +1,7 @@
 #!/bin/bash
 # -------------------------------------------------------------------
 # Git Flow Enhanced (gf)
-# Version: 1.1.0
+# Version: 1.1.1
 # Author: Christian Benítez
 # GitHub: https://github.com/chrisatdev
 # Description: Advanced Git workflow automation tool
@@ -72,6 +72,7 @@ show_help() {
 
 # Function to generate detailed file status information
 generate_file_status() {
+    # Initialize empty status info string
     local status_info=""
 
     # New files
@@ -311,6 +312,35 @@ add_changes() {
 commit_and_push() {
     local commit_message="$1"
 
+    # Get current branch early for main branch check
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+    # Skip MR creation for main branch
+    if [ "$current_branch" = "main" ]; then
+        echo -e "${YELLOW}⚠️  No MR will be created for main branch${NC}"
+
+        if [ -z "$commit_message" ]; then
+            commit_message=$(generate_semantic_message)
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}❌ No changes to commit${NC}"
+                exit 1
+            fi
+            short_msg=$(echo "$commit_message" | head -n1)
+            emoji=$(echo "$short_msg" | grep -o -E '✨|🐛|📝|💄|♻️|✅|🔧|👷|⚙️|⚡|⏪')
+            echo -e "${YELLOW}📝 Auto-generated commit message: ${PURPLE}$short_msg ${emoji}${NC}"
+        fi
+
+        # Resto del proceso normal de commit/push sin MR
+        update_changelog "$(echo "$commit_message" | head -n1)"
+        echo -e "${GREEN}💾 Creating commit...${NC}"
+        local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^###/*/g' | sed 's/^🆕/**New files**/g' | sed 's/^✏️/**Modified files**/g')
+        git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
+
+        echo -e "${GREEN}📤 Pushing to ${CYAN}main${GREEN}...${NC}"
+        git push origin main
+        return # Salir temprano para rama main
+    fi
+
     if [ -z "$commit_message" ]; then
         commit_message=$(generate_semantic_message)
         if [ $? -ne 0 ]; then
@@ -340,7 +370,10 @@ commit_and_push() {
     update_changelog "$(echo "$commit_message" | head -n1)"
 
     echo -e "${GREEN}💾 Creating commit...${NC}"
-    local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^• /- /g')
+    local md_body$(echo "$commit_message" | tail -n +3 |
+        sed 's/^###/*/g' |
+        sed 's/^🆕/**New files**/g' |
+        sed 's/^✏️/**Modified files**/g')=
     git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
 
     if [ $? -ne 0 ]; then
@@ -379,6 +412,18 @@ merge_main() {
     if [ "$current_branch" = "main" ]; then
         echo -e "${RED}❌ Cannot merge main into itself${NC}"
         exit 1
+    fi
+
+    # Check for uncommitted changes
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo -e "${YELLOW}⚠️  Uncommitted changes detected${NC}"
+        read -p "Do you want to commit these changes before merging? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            git add .
+            commit_message="${GITMOJI["chore"]} chore: Auto-commit before merge"
+            git commit -m "$commit_message"
+        fi
     fi
 
     echo -e "${GREEN}🔄 Updating main branch...${NC}"
