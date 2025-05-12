@@ -16,6 +16,10 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+#Initial cursor setup
+trap 'tput cnorm; exit' INT TERM EXIT
+tput civis
+
 # Gitmoji mapping
 declare -A GITMOJI=(
     ["feat"]="✨"      # New feature
@@ -73,33 +77,33 @@ generate_file_status() {
     # New files
     local new_files=$(git diff --name-only --cached --diff-filter=A)
     if [ -n "$new_files" ]; then
-        status_info+="🆕 ${GREEN}New files:${NC}\n"
-        status_info+=$(echo "$new_files" | sed 's/^/• /')
-        status_info+="\n\n"
+        status_info+="\n### 🆕 New files\n"
+        status_info+=$(echo "$new_files" | sed 's/^/- /')
+        status_info+="\n"
     fi
 
     # Modified files
     local modified_files=$(git diff --name-only --cached --diff-filter=M)
     if [ -n "$modified_files" ]; then
-        status_info+="✏️ ${YELLOW}Modified files:${NC}\n"
-        status_info+=$(echo "$modified_files" | sed 's/^/• /')
-        status_info+="\n\n"
+        status_info+="\n### ✏️ Modified files\n"
+        status_info+=$(echo "$modified_files" | sed 's/^/- /')
+        status_info+="\n"
     fi
 
     # Deleted files
     local deleted_files=$(git diff --name-only --cached --diff-filter=D)
     if [ -n "$deleted_files" ]; then
-        status_info+="🗑️ ${RED}Deleted files:${NC}\n"
-        status_info+=$(echo "$deleted_files" | sed 's/^/• /')
-        status_info+="\n\n"
+        status_info+="\n### 🗑️ Deleted files\n"
+        status_info+=$(echo "$deleted_files" | sed 's/^/- /')
+        status_info+="\n"
     fi
 
     # Renamed files
     local renamed_files=$(git diff --name-only --cached --diff-filter=R)
     if [ -n "$renamed_files" ]; then
-        status_info+="🏷️ ${BLUE}Renamed files:${NC}\n"
-        status_info+=$(echo "$renamed_files" | sed 's/^/• /')
-        status_info+="\n\n"
+        status_info+="\n### 🏷️ Renamed files\n"
+        status_info+=$(echo "$renamed_files" | sed 's/^/- /')
+        status_info+="\n"
     fi
 
     echo -e "$status_info"
@@ -336,7 +340,8 @@ commit_and_push() {
     update_changelog "$(echo "$commit_message" | head -n1)"
 
     echo -e "${GREEN}💾 Creating commit...${NC}"
-    git commit -m "$(echo "$commit_message" | head -n1)" -m "$(echo "$commit_message" | tail -n +3)"
+    local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^• /- /g')
+    git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}❌ Error creating commit${NC}"
@@ -504,3 +509,6 @@ case $1 in
     exit 1
     ;;
 esac
+
+# Restore cursor
+tput cnorm
