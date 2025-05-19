@@ -370,10 +370,7 @@ commit_and_push() {
     update_changelog "$(echo "$commit_message" | head -n1)"
 
     echo -e "${GREEN}💾 Creating commit...${NC}"
-    local md_body$(echo "$commit_message" | tail -n +3 |
-        sed 's/^###/*/g' |
-        sed 's/^🆕/**New files**/g' |
-        sed 's/^✏️/**Modified files**/g')=
+    local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^• /- /g')
     git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
 
     if [ $? -ne 0 ]; then
