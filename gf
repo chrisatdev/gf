@@ -502,7 +502,9 @@ create_mr() {
 }
 
 # Main execution
-init_changelog
+if [ "$1" != "-h" ]; then
+    init_changelog
+fi
 
 if [ $# -eq 0 ]; then
     show_help
