@@ -50,6 +50,7 @@ show_help() {
     echo -e "${GREEN} GitHub: https://github.com/chrisatdev${NC}"
     echo -e "${GREEN}   Usage:${NC}"
     echo -e "  ${CYAN}gf -i${NC}                        ${GREEN}🆕${NC} Initialize new Git repository"
+    echo -e "  ${CYAN}gf -s${NC}                        ${GREEN}✅${NC} Alias to git status"
     echo -e "  ${CYAN}gf -s -f [name]${NC}              ${GREEN}✨${NC} Create feature branch (feature/name)"
     echo -e "  ${CYAN}gf -s -h [name]${NC}              ${RED}🐛${NC} Create hotfix branch (hotfix/name)"
     echo -e "  ${CYAN}gf -s -b [name]${NC}              ${YELLOW}🚑${NC} Create bugfix branch (bugfix/name)"
