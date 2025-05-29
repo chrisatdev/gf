@@ -55,7 +55,7 @@ show_help() {
     echo -e "  ${CYAN}gf -s -b [name]${NC}              ${YELLOW}🚑${NC} Create bugfix branch (bugfix/name)"
     echo -e "  ${CYAN}gf -s -r [name]${NC}              ${BLUE}🚀${NC} Create release branch (release/name)"
     echo -e "  ${CYAN}gf -a [files]${NC}                ${GREEN}📦${NC} Stage changes (stage all if no files specified)"
-    echo -e "  ${CYAN}gf -p \"[msg]\"${NC}              ${GREEN}💾${NC} Commit (with message) and push, then open MR/PR"
+    echo -e "  ${CYAN}gf -p \"[msg]\"${NC}                ${GREEN}💾${NC} Commit (with message) and push, then open MR/PR"
     echo -e "  ${CYAN}gf -m${NC}                        ${GREEN}🔀${NC} Merge main into current branch (handle conflicts)"
     echo -e "  ${CYAN}gf -f${NC}                        ${RED}🗑️${NC} Finish and delete current branch (local & remote)"
     echo -e "  ${CYAN}gf -r [source] [target]${NC}      ${PURPLE}🔄${NC} Create MR from source to target branch (GitLab)"
@@ -517,8 +517,12 @@ case $1 in
     exit 0
     ;;
 -s)
-    shift
-    start_branch "$@"
+    if [[ -z "$2" ]]; then
+        git status
+    else
+        shift
+        start_branch "$@"
+    fi
     exit 0
     ;;
 -a)
