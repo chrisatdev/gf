@@ -1,7 +1,7 @@
 # Git Flow Enhanced (gf) 🚀
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Version](https://img.shields.io/badge/Version-1.1.1-blue)
+![Version](https://img.shields.io/badge/Version-1.1.2-blue)
 ![Bash](https://img.shields.io/badge/Bash-5.0%2B-brightgreen)
 
 A powerful Git workflow automation tool with semantic commits, Gitmoji support, and advanced features.
