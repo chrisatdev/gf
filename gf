@@ -391,10 +391,12 @@ commit_and_push() {
             mr_url="https://${remote_url}/-/merge_requests/new?merge_request[source_branch]=${current_branch}"
             echo -e "${CYAN}🔗 Opening Merge Request...${NC}"
             xdg-open "$mr_url" 2>/dev/null || open "$mr_url" 2>/dev/null || start "$mr_url" 2>/dev/null
+            exit 0
         elif [[ $remote_url == *"github"* ]]; then
             pr_url="https://${remote_url}/compare/${current_branch}?expand=1"
             echo -e "${CYAN}🔗 Opening Pull Request...${NC}"
             xdg-open "$pr_url" 2>/dev/null || open "$pr_url" 2>/dev/null || start "$pr_url" 2>/dev/null
+            exit 0
         fi
     else
         echo -e "${RED}❌ Error pushing changes${NC}"
@@ -500,6 +502,7 @@ create_mr() {
 
     # Return to original branch
     git checkout "$current_branch" 2>/dev/null
+    exit 0
 }
 
 # Main execution
