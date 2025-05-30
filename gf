@@ -1,7 +1,7 @@
 #!/bin/bash
 # -------------------------------------------------------------------
 # Git Flow Enhanced (gf)
-# Version: 1.1.1
+# Version: 1.1.2
 # Author: Christian Benítez
 # GitHub: https://github.com/chrisatdev
 # Description: Advanced Git workflow automation tool
@@ -46,7 +46,7 @@ init_changelog() {
 # Function to show help
 show_help() {
     echo -e "${GREEN}🚀 Git Flow Enhanced (gf)${NC}"
-    echo -e "${GREEN} Version: 1.1.0 - by Christian Benítez${NC}"
+    echo -e "${GREEN} Version: 1.1.2 - by Christian Benítez${NC}"
     echo -e "${GREEN} GitHub: https://github.com/chrisatdev${NC}"
     echo -e "${GREEN}   Usage:${NC}"
     echo -e "  ${CYAN}gf -i${NC}                        ${GREEN}🆕${NC} Initialize new Git repository"
