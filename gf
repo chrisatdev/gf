@@ -29,6 +29,26 @@ EMOJI_HOTFIX="🚨"
 EMOJI_INIT="🎉"
 EMOJI_MERGE="🔀"
 EMOJI_DELETE="🗑️"
+EMOJI_BUILD="👷"
+EMOJI_PERF="⚡"
+
+# Gitmoji mapping
+declare -A GITMOJI=(
+    ["feat"]="✨"
+    ["fix"]="🐛"
+    ["docs"]="📝"
+    ["style"]="💄"
+    ["refactor"]="♻️"
+    ["test"]="✅"
+    ["chore"]="🔧"
+    ["build"]="👷"
+    ["ci"]="⚙️"
+    ["perf"]="⚡"
+    ["revert"]="⏪"
+    ["hotfix"]="🚨"
+    ["init"]="🎉"
+    ["merge"]="🔀"
+)
 
 # Function to print colored output
 print_color() {
@@ -75,120 +95,220 @@ check_git_repo() {
     fi
 }
 
+# Initialize CHANGELOG.md if it doesn't exist
+init_changelog() {
+    if [ ! -f "CHANGELOG.md" ]; then
+        cat >CHANGELOG.md <<'EOF'
+# CHANGELOG
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup
+- Basic functionality implemented
+
+EOF
+        git add CHANGELOG.md 2>/dev/null
+        print_success "CHANGELOG.md created"
+    fi
+}
+
+# Function to generate detailed file status information
+generate_file_status() {
+    local status_info=""
+
+    # New files
+    local new_files=$(git diff --name-only --cached --diff-filter=A 2>/dev/null)
+    if [ -n "$new_files" ]; then
+        status_info+="\n### 🆕 New files\n"
+        status_info+=$(echo "$new_files" | sed 's/^/- /')
+        status_info+="\n"
+    fi
+
+    # Modified files
+    local modified_files=$(git diff --name-only --cached --diff-filter=M 2>/dev/null)
+    if [ -n "$modified_files" ]; then
+        status_info+="\n### ✏️ Modified files\n"
+        status_info+=$(echo "$modified_files" | sed 's/^/- /')
+        status_info+="\n"
+    fi
+
+    # Deleted files
+    local deleted_files=$(git diff --name-only --cached --diff-filter=D 2>/dev/null)
+    if [ -n "$deleted_files" ]; then
+        status_info+="\n### 🗑️ Deleted files\n"
+        status_info+=$(echo "$deleted_files" | sed 's/^/- /')
+        status_info+="\n"
+    fi
+
+    # Renamed files
+    local renamed_files=$(git diff --name-only --cached --diff-filter=R 2>/dev/null)
+    if [ -n "$renamed_files" ]; then
+        status_info+="\n### 🏷️ Renamed files\n"
+        status_info+=$(echo "$renamed_files" | sed 's/^/- /')
+        status_info+="\n"
+    fi
+
+    echo -e "$status_info"
+}
+
 # Function to detect commit type based on file changes
 detect_commit_type() {
-    local modified_files=$(git diff --cached --name-only)
-    local new_files=$(git diff --cached --diff-filter=A --name-only)
-    local deleted_files=$(git diff --cached --diff-filter=D --name-only)
+    local staged_files=$(git diff --name-only --cached 2>/dev/null)
+    local change_types=$(git diff --name-only --cached 2>/dev/null | xargs -I {} git diff --cached --name-status {} 2>/dev/null | cut -f1 | sort | uniq)
 
-    # Check for specific patterns
-    if echo "$modified_files" | grep -qE "\.(md|txt|rst)$|README|CHANGELOG|docs/"; then
-        echo "docs"
-    elif echo "$modified_files" | grep -qE "test|spec|__tests__|\.test\.|\.spec\."; then
-        echo "test"
-    elif echo "$modified_files" | grep -qE "package\.json|Gemfile|requirements\.txt|composer\.json"; then
-        echo "chore"
-    elif echo "$modified_files" | grep -qE "\.css$|\.scss$|\.sass$|\.less$|\.styl$"; then
-        echo "style"
-    elif [[ -n "$new_files" ]]; then
-        echo "feat"
-    elif [[ -n "$deleted_files" ]]; then
-        echo "chore"
-    else
-        # Default to feat for new functionality or fix for modifications
-        if git diff --cached | grep -q "^+.*function\|^+.*class\|^+.*const\|^+.*let\|^+.*var"; then
+    # Check for new features (new files with significant code)
+    if echo "$staged_files" | grep -q -E '(src/|lib/|app/|components/|pages/|api/).*\.(js|ts|jsx|tsx|py|php|java|rb|go|c|cpp|cs|kt|swift)$'; then
+        if echo "$change_types" | grep -q '^A'; then
             echo "feat"
-        else
-            echo "fix"
+            return
         fi
     fi
-}
 
-# Function to get emoji for commit type
-get_emoji_for_type() {
-    case $1 in
-    "feat") echo $EMOJI_FEAT ;;
-    "fix") echo $EMOJI_FIX ;;
-    "docs") echo $EMOJI_DOCS ;;
-    "style") echo $EMOJI_STYLE ;;
-    "refactor") echo $EMOJI_REFACTOR ;;
-    "test") echo $EMOJI_TEST ;;
-    "chore") echo $EMOJI_CHORE ;;
-    "hotfix") echo $EMOJI_HOTFIX ;;
-    *) echo $EMOJI_FEAT ;;
-    esac
-}
-
-# Function to generate commit message
-generate_commit_message() {
-    local commit_type=$(detect_commit_type)
-    local emoji=$(get_emoji_for_type $commit_type)
-    local modified_files=$(git diff --cached --name-only)
-    local files_count=$(echo "$modified_files" | wc -l)
-
-    # Generate short message
-    local short_message=""
-    case $commit_type in
-    "feat")
-        short_message="add new functionality"
-        ;;
-    "fix")
-        short_message="resolve issues and bugs"
-        ;;
-    "docs")
-        short_message="update documentation"
-        ;;
-    "style")
-        short_message="improve code formatting"
-        ;;
-    "refactor")
-        short_message="refactor code structure"
-        ;;
-    "test")
-        short_message="add or update tests"
-        ;;
-    "chore")
-        short_message="update dependencies and tools"
-        ;;
-    esac
-
-    # Generate changelog-compatible format
-    local user=$(get_git_user)
-    local branch=$(get_current_branch)
-
-    # Main commit message in changelog format
-    local commit_message="$emoji $commit_type: $short_message by @$user"
-
-    # Detailed description for commit body
-    local long_message="Modified files:"
-    while IFS= read -r file; do
-        [[ -n "$file" ]] && long_message="$long_message\n- $file"
-    done <<<"$modified_files"
-
-    long_message="$long_message\n\nBranch: $branch"
-
-    echo -e "$commit_message\n\n$long_message"
-}
-
-# Function to generate changelog
-generate_changelog() {
-    check_git_repo
-
-    local limit=${1:-10}     # Default to last 10 commits
-    local format=${2:-"all"} # "all" or "current-branch"
-
-    print_info "Generating changelog (last $limit commits)..."
-
-    if [[ "$format" == "current-branch" ]]; then
-        # Only commits from current branch
-        git log --oneline -n "$limit" --pretty=format:"%C(yellow)%h%C(reset): %s"
-    else
-        # All commits
-        git log --oneline -n "$limit" --all --pretty=format:"%C(yellow)%h%C(reset): %s"
+    # Check for documentation changes
+    if echo "$staged_files" | grep -q -E '(README|CHANGELOG|docs/|\.md$|\.txt$|\.rst$)'; then
+        echo "docs"
+        return
     fi
 
-    echo ""
-    print_success "Changelog generated successfully!"
+    # Check for test changes
+    if echo "$staged_files" | grep -q -E '(test/|spec/|__tests__|\.test\.|\.spec\.|cypress/|jest\.)'; then
+        echo "test"
+        return
+    fi
+
+    # Check for style changes
+    if echo "$staged_files" | grep -q -E '\.(css|scss|sass|less|styl)$'; then
+        echo "style"
+        return
+    fi
+
+    # Check for build/config changes
+    if echo "$staged_files" | grep -q -E '(package\.json|composer\.json|Gemfile|requirements\.txt|Dockerfile|\.yml$|\.yaml$|webpack|gulpfile|Makefile)'; then
+        echo "chore"
+        return
+    fi
+
+    # Check for bug fixes (modifications with keywords)
+    if echo "$staged_files" | grep -q -E '(fix|bug|error|issue|patch)' && echo "$change_types" | grep -q '^M'; then
+        echo "fix"
+        return
+    fi
+
+    # Check for refactoring (modifications to code files without bug keywords)
+    if echo "$change_types" | grep -q '^M' && echo "$staged_files" | grep -q -E '\.(js|ts|jsx|tsx|py|php|java|rb|go|c|cpp|cs|kt|swift)$'; then
+        echo "refactor"
+        return
+    fi
+
+    # Default to chore
+    echo "chore"
+}
+
+# Function to generate intelligent commit message
+generate_commit_message() {
+    local staged_files=$(git diff --name-only --cached 2>/dev/null)
+    local num_changes=$(echo "$staged_files" | grep -c '^' 2>/dev/null || echo "0")
+    local user=$(get_git_user)
+
+    if [ $num_changes -eq 0 ]; then
+        print_error "No staged changes found"
+        return 1
+    fi
+
+    local commit_type=$(detect_commit_type)
+    local emoji=${GITMOJI[$commit_type]}
+
+    # Generate intelligent short description
+    local short_desc=""
+    case $commit_type in
+    "feat")
+        local main_file=$(echo "$staged_files" | grep -E '\.(js|ts|jsx|tsx|py|php|java|rb|go)$' | head -n1)
+        if [ -n "$main_file" ]; then
+            local filename=$(basename "$main_file" | sed 's/\.[^.]*$//' | sed 's/_/ /g' | sed 's/-/ /g')
+            short_desc="add $filename functionality"
+        else
+            short_desc="add new functionality"
+        fi
+        ;;
+    "fix")
+        local main_file=$(echo "$staged_files" | head -n1)
+        if [ -n "$main_file" ]; then
+            local filename=$(basename "$main_file")
+            short_desc="resolve issues in $filename"
+        else
+            short_desc="resolve issues and bugs"
+        fi
+        ;;
+    "docs") short_desc="update documentation" ;;
+    "style") short_desc="improve code formatting and styles" ;;
+    "test") short_desc="add or update tests" ;;
+    "refactor") short_desc="refactor code structure" ;;
+    "chore") short_desc="update configuration and dependencies" ;;
+    *) short_desc="update files" ;;
+    esac
+
+    # Generate detailed file status
+    local file_status=$(generate_file_status)
+
+    # Combine messages in the requested format
+    echo -e "$emoji $commit_type: $short_desc by @$user$file_status"
+}
+
+# Function to update CHANGELOG.md automatically
+update_changelog() {
+    local commit_message="$1"
+    local changelog_file="CHANGELOG.md"
+
+    if [ ! -f "$changelog_file" ]; then
+        return
+    fi
+
+    # Extract commit info
+    local commit_type=$(echo "$commit_message" | grep -o -E '(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert):' | sed 's/://')
+    local commit_desc=$(echo "$commit_message" | sed -E 's/^[^:]+: (.+) by @.*$/\1/')
+    local user=$(echo "$commit_message" | grep -o 'by @[^[:space:]]*' | sed 's/by @//')
+    local short_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "pending")
+
+    # Map commit type to changelog section
+    case $commit_type in
+    "feat") local section="### Added" ;;
+    "fix") local section="### Fixed" ;;
+    "docs") local section="### Documentation" ;;
+    "style") local section="### Style" ;;
+    "refactor") local section="### Refactored" ;;
+    "test") local section="### Testing" ;;
+    "chore") local section="### Maintenance" ;;
+    "perf") local section="### Performance" ;;
+    "build") local section="### Build" ;;
+    *) local section="### Changed" ;;
+    esac
+
+    # Create changelog entry
+    local changelog_entry="- \`$short_hash\`: $commit_desc by @$user"
+
+    # Update CHANGELOG.md
+    if grep -q "## \[Unreleased\]" "$changelog_file"; then
+        if ! grep -q "$section" "$changelog_file"; then
+            # Section doesn't exist, add it
+            sed -i "/## \[Unreleased\]/a\\$section\n$changelog_entry" "$changelog_file"
+        else
+            # Section exists, append to it
+            sed -i "/$section/a\\$changelog_entry" "$changelog_file"
+        fi
+    else
+        # Create new Unreleased section
+        echo -e "## [Unreleased]\n$section\n$changelog_entry\n\n$(cat "$changelog_file")" >"$changelog_file"
+    fi
+
+    # Stage CHANGELOG.md changes
+    git add "$changelog_file" 2>/dev/null
+    print_info "CHANGELOG.md updated automatically"
 }
 
 # Function to initialize git flow
@@ -202,13 +322,17 @@ init_git_flow() {
         print_success "Git repository initialized"
     fi
 
+    # Initialize CHANGELOG.md
+    init_changelog
+
     # Create initial commit if none exists
     if ! git rev-parse HEAD >/dev/null 2>&1; then
         local user=$(get_git_user)
-        git commit --allow-empty -m "$EMOJI_INIT init: initial commit by @$user
+        git commit --allow-empty -m "$EMOJI_INIT init: initial repository setup by @$user
 
-Repository initialization
+Project initialization
 - Created empty repository
+- Added CHANGELOG.md
 - Ready for development"
         print_success "Initial commit created"
     fi
@@ -298,21 +422,53 @@ push_changes() {
         exit 1
     fi
 
+    # Initialize changelog if it doesn't exist
+    init_changelog
+
     # Check if there are staged changes
     if ! git diff --cached --quiet; then
-        # Generate or use custom commit message
         local commit_message=""
+
         if [[ -n "$custom_message" ]]; then
-            local commit_type=$(detect_commit_type)
-            local emoji=$(get_emoji_for_type $commit_type)
             local user=$(get_git_user)
-            commit_message="$emoji $commit_type: $custom_message by @$user"
+            local commit_type=$(detect_commit_type)
+            local emoji=${GITMOJI[$commit_type]}
+
+            # Check if message already has type prefix
+            if [[ "$custom_message" =~ ^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert): ]]; then
+                commit_message="$emoji $custom_message by @$user"
+            else
+                commit_message="$emoji $commit_type: $custom_message by @$user"
+            fi
         else
             commit_message=$(generate_commit_message)
+            if [[ $? -ne 0 ]]; then
+                print_error "No changes to commit"
+                exit 1
+            fi
         fi
 
+        # Extract main commit line and body
+        local commit_title=$(echo "$commit_message" | head -n1)
+        local commit_body=$(echo "$commit_message" | tail -n +2 | sed 's/^###/**/g')
+
         # Create commit
-        git commit -m "$commit_message"
+        if [[ -n "$commit_body" && "$commit_body" != " " ]]; then
+            git commit -m "$commit_title" -m "$commit_body"
+        else
+            git commit -m "$commit_title"
+        fi
+
+        # Update changelog after commit to get correct hash
+        update_changelog "$commit_title"
+
+        # If changelog was updated, amend the commit to include it
+        if ! git diff --quiet CHANGELOG.md 2>/dev/null; then
+            git add CHANGELOG.md
+            git commit --amend --no-edit
+            print_success "CHANGELOG.md updated and included in commit"
+        fi
+
         print_success "Commit created with semantic message"
     elif ! git diff --quiet; then
         print_warning "You have unstaged changes. Run 'gf -a' first to stage them."
@@ -326,17 +482,25 @@ push_changes() {
     if [[ $? -eq 0 ]]; then
         print_success "Successfully pushed to origin/$current_branch"
 
-        # Extract MR URL from push output
-        local mr_url=$(echo "$push_output" | grep -o 'https://[^[:space:]]*/-/merge_requests/new[^[:space:]]*' | head -1)
+        # Generate MR/PR URL
+        local remote_url=$(git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's/git@\(.*\):/https:\/\/\1\//' | sed 's/ssh:\/\/git@/https:\/\//')
+        local mr_url=""
+
+        if [[ "$remote_url" == *"gitlab"* ]]; then
+            mr_url="${remote_url}/-/merge_requests/new?merge_request[source_branch]=${current_branch}&merge_request[target_branch]=main"
+            print_info "Opening GitLab Merge Request..."
+        elif [[ "$remote_url" == *"github"* ]]; then
+            mr_url="${remote_url}/compare/main...${current_branch}?expand=1"
+            print_info "Opening GitHub Pull Request..."
+        fi
 
         if [[ -n "$mr_url" ]]; then
-            print_info "Opening Merge Request in browser..."
             if command -v xdg-open >/dev/null; then
                 xdg-open "$mr_url" 2>/dev/null &
             elif command -v open >/dev/null; then
                 open "$mr_url" 2>/dev/null &
             else
-                print_info "Merge Request URL: $mr_url"
+                print_info "Merge/Pull Request URL: $mr_url"
             fi
         fi
     else
@@ -416,9 +580,37 @@ finish_branch() {
         print_info "Remote branch did not exist or could not be deleted"
 }
 
+# Function to view changelog
+view_changelog() {
+    check_git_repo
+
+    local lines=${1:-20}
+    local format=${2:-"file"}
+
+    if [[ "$format" == "git" ]]; then
+        print_info "Git history (last $lines commits):"
+        git log --oneline -n "$lines" --pretty=format:"%C(yellow)%h%C(reset): %s" --all
+        echo ""
+    else
+        if [[ -f "CHANGELOG.md" ]]; then
+            print_info "Project CHANGELOG.md:"
+            head -n $lines CHANGELOG.md | while IFS= read -r line; do
+                print_color $CYAN "$line"
+            done
+        else
+            print_warning "CHANGELOG.md not found. Initialize with 'gf -i' or create manually."
+            print_info "Showing git log instead:"
+            git log --oneline -n 10 --pretty=format:"%C(yellow)%h%C(reset): %s"
+        fi
+        echo ""
+    fi
+
+    print_success "Changelog displayed successfully!"
+}
+
 # Function to show help
 show_help() {
-    print_color $CYAN "🚀 GF - Advanced Git Flow Command v1.1.3"
+    print_color $CYAN "🚀 GF - Advanced Git Flow Command v1.1.2"
     echo ""
     print_color $WHITE "USAGE:"
     echo "  gf [OPTION] [ARGUMENTS]"
@@ -427,7 +619,7 @@ show_help() {
     echo ""
     print_color $GREEN "  -i, --init"
     echo "    Initialize git flow in current project"
-    echo "    Creates git repository and initial commit"
+    echo "    Creates git repository, CHANGELOG.md and initial commit"
     echo ""
     print_color $GREEN "  -s, --start [TYPE] [NAME]"
     echo "    Start a new branch from main with automatic pull"
@@ -445,7 +637,7 @@ show_help() {
     print_color $GREEN "  -p, --push [MESSAGE]"
     echo "    Create semantic commit and push to remote"
     echo "    Auto-generates commit message or uses provided message"
-    echo "    Automatically opens Merge Request URL"
+    echo "    Automatically updates CHANGELOG.md and opens MR URL"
     echo ""
     print_color $GREEN "  -m, --merge"
     echo "    Merge latest changes from main branch"
@@ -455,10 +647,10 @@ show_help() {
     echo "    Delete current branch (local and remote)"
     echo "    Switches to main before deletion"
     echo ""
-    print_color $GREEN "  -c, --changelog [LIMIT] [FORMAT]"
-    echo "    Generate changelog with commit history"
-    echo "    LIMIT: number of commits (default: 10)"
-    echo "    FORMAT: 'all' or 'current-branch' (default: all)"
+    print_color $GREEN "  -c, --changelog [LINES] [FORMAT]"
+    echo "    View project changelog"
+    echo "    LINES: number of lines to show (default: 20)"
+    echo "    FORMAT: 'file' (CHANGELOG.md) or 'git' (git log) (default: file)"
     echo ""
     print_color $GREEN "  -h, --help"
     echo "    Show this help message"
@@ -466,7 +658,7 @@ show_help() {
     print_color $WHITE "EXAMPLES:"
     echo ""
     print_color $YELLOW "  gf -i"
-    echo "    Initialize git flow"
+    echo "    Initialize git flow with CHANGELOG.md"
     echo ""
     print_color $YELLOW "  gf -s -f ticket-1000"
     echo "    Create feature branch 'feature/ticket-1000'"
@@ -487,20 +679,25 @@ show_help() {
     echo "    Delete current branch"
     echo ""
     print_color $YELLOW "  gf -c"
-    echo "    Generate changelog (last 10 commits)"
+    echo "    View CHANGELOG.md (20 lines)"
     echo ""
-    print_color $YELLOW "  gf -c 20 current-branch"
-    echo "    Generate changelog for current branch (last 20 commits)"
+    print_color $YELLOW "  gf -c 50 file"
+    echo "    View CHANGELOG.md (50 lines)"
+    echo ""
+    print_color $YELLOW "  gf -c 10 git"
+    echo "    View git history (10 commits)"
     echo ""
     print_color $WHITE "FEATURES:"
     echo "  • Semantic commits with gitmoji integration"
-    echo "  • Automatic commit message generation"
-    echo "  • Changelog format: <hash>: <emoji> <type>: <message> by @user"
+    echo "  • Automatic CHANGELOG.md generation and maintenance"
+    echo "  • Intelligent commit message generation based on file changes"
+    echo "  • Auto-categorized changelog entries (Added/Fixed/Changed/etc.)"
+    echo "  • Commit format: <hash>: <emoji> <type>: <message> by @user"
+    echo "  • Detailed file status tracking (New/Modified/Deleted/Renamed)"
     echo "  • Conflict detection and resolution guidance"
     echo "  • Automatic Merge Request creation"
     echo "  • Branch naming conventions"
     echo "  • Colored output for better UX"
-    echo "  • Changelog generation with git history"
     echo ""
 }
 
@@ -538,7 +735,7 @@ main() {
         ;;
     -c | --changelog)
         shift
-        generate_changelog "$@"
+        view_changelog "$@"
         ;;
     -h | --help)
         show_help
