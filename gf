@@ -122,32 +122,32 @@ EOF
 generate_file_status() {
     local status_info=""
 
-    # New files
-    local new_files=$(git diff --name-only --cached --diff-filter=A 2>/dev/null)
+    # New files (excluding CHANGELOG.md)
+    local new_files=$(git diff --name-only --cached --diff-filter=A 2>/dev/null | grep -v "^CHANGELOG.md$")
     if [ -n "$new_files" ]; then
         status_info+="\n### 🆕 New files\n"
         status_info+=$(echo "$new_files" | sed 's/^/- /')
         status_info+="\n"
     fi
 
-    # Modified files
-    local modified_files=$(git diff --name-only --cached --diff-filter=M 2>/dev/null)
+    # Modified files (excluding CHANGELOG.md)
+    local modified_files=$(git diff --name-only --cached --diff-filter=M 2>/dev/null | grep -v "^CHANGELOG.md$")
     if [ -n "$modified_files" ]; then
         status_info+="\n### ✏️ Modified files\n"
         status_info+=$(echo "$modified_files" | sed 's/^/- /')
         status_info+="\n"
     fi
 
-    # Deleted files
-    local deleted_files=$(git diff --name-only --cached --diff-filter=D 2>/dev/null)
+    # Deleted files (excluding CHANGELOG.md)
+    local deleted_files=$(git diff --name-only --cached --diff-filter=D 2>/dev/null | grep -v "^CHANGELOG.md$")
     if [ -n "$deleted_files" ]; then
         status_info+="\n### 🗑️ Deleted files\n"
         status_info+=$(echo "$deleted_files" | sed 's/^/- /')
         status_info+="\n"
     fi
 
-    # Renamed files
-    local renamed_files=$(git diff --name-only --cached --diff-filter=R 2>/dev/null)
+    # Renamed files (excluding CHANGELOG.md)
+    local renamed_files=$(git diff --name-only --cached --diff-filter=R 2>/dev/null | grep -v "^CHANGELOG.md$")
     if [ -n "$renamed_files" ]; then
         status_info+="\n### 🏷️ Renamed files\n"
         status_info+=$(echo "$renamed_files" | sed 's/^/- /')
@@ -162,6 +162,9 @@ detect_commit_type() {
     local staged_files=$(git diff --name-only --cached 2>/dev/null)
     local change_types=$(git diff --name-only --cached 2>/dev/null | xargs -I {} git diff --cached --name-status {} 2>/dev/null | cut -f1 | sort | uniq)
 
+    # Filter out CHANGELOG.md from detection to avoid affecting commit type
+    staged_files=$(echo "$staged_files" | grep -v "^CHANGELOG.md$")
+
     # Check for new features (new files with significant code)
     if echo "$staged_files" | grep -q -E '(src/|lib/|app/|components/|pages/|api/).*\.(js|ts|jsx|tsx|py|php|java|rb|go|c|cpp|cs|kt|swift)$'; then
         if echo "$change_types" | grep -q '^A'; then
@@ -171,7 +174,7 @@ detect_commit_type() {
     fi
 
     # Check for documentation changes
-    if echo "$staged_files" | grep -q -E '(README|CHANGELOG|docs/|\.md$|\.txt$|\.rst$)'; then
+    if echo "$staged_files" | grep -q -E '(README|docs/|\.md$|\.txt$|\.rst$)'; then
         echo "docs"
         return
     fi
@@ -218,6 +221,12 @@ generate_commit_message() {
 
     if [ $num_changes -eq 0 ]; then
         print_error "No staged changes found"
+        return 1
+    fi
+
+    # Skip if only CHANGELOG.md is staged (avoid recursive commits)
+    if [ $num_changes -eq 1 ] && echo "$staged_files" | grep -q "^CHANGELOG.md$"; then
+        print_error "Only CHANGELOG.md staged - this would create recursive commits"
         return 1
     fi
 
@@ -275,6 +284,11 @@ update_changelog() {
     local user=$(echo "$commit_message" | grep -o 'by @[^[:space:]]*' | sed 's/by @//')
     local short_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "pending")
 
+    # Don't update changelog for changelog-related commits to avoid recursion
+    if [[ "$commit_desc" =~ "update changelog"i ]] || [[ "$commit_desc" =~ "changelog"i && "$commit_type" == "chore" ]]; then
+        return
+    fi
+
     # Map commit type to changelog section
     case $commit_type in
     "feat") local section="### Added" ;;
@@ -292,6 +306,14 @@ update_changelog() {
     # Create changelog entry
     local changelog_entry="- \`$short_hash\`: $commit_desc by @$user"
 
+    # Check if this exact entry already exists to avoid duplicates
+    if grep -q "$changelog_entry" "$changelog_file"; then
+        return
+    fi
+
+    # Create a backup of the original file to compare later
+    local original_content=$(cat "$changelog_file")
+
     # Update CHANGELOG.md
     if grep -q "## \[Unreleased\]" "$changelog_file"; then
         if ! grep -q "$section" "$changelog_file"; then
@@ -306,9 +328,11 @@ update_changelog() {
         echo -e "## [Unreleased]\n$section\n$changelog_entry\n\n$(cat "$changelog_file")" >"$changelog_file"
     fi
 
-    # Stage CHANGELOG.md changes
-    git add "$changelog_file" 2>/dev/null
-    print_info "CHANGELOG.md updated automatically"
+    # Only report update if file actually changed
+    local new_content=$(cat "$changelog_file")
+    if [ "$original_content" != "$new_content" ]; then
+        print_info "CHANGELOG.md updated automatically"
+    fi
 }
 
 # Function to initialize git flow
@@ -432,6 +456,12 @@ push_changes() {
     # Initialize changelog if it doesn't exist
     init_changelog
 
+    # Check if there are any changes to commit
+    if git diff --cached --quiet && git diff --quiet; then
+        print_warning "No changes to commit"
+        return 0
+    fi
+
     # Check if there are staged changes
     if ! git diff --cached --quiet; then
         local commit_message=""
@@ -466,20 +496,24 @@ push_changes() {
             git commit -m "$commit_title"
         fi
 
+        print_success "Commit created with semantic message"
+
         # Update changelog after commit to get correct hash
         update_changelog "$commit_title"
 
-        # If changelog was updated, amend the commit to include it
+        # Check if CHANGELOG.md was actually modified and add it to the same commit
         if ! git diff --quiet CHANGELOG.md 2>/dev/null; then
             git add CHANGELOG.md
             git commit --amend --no-edit
-            print_success "CHANGELOG.md updated and included in commit"
+            print_info "CHANGELOG.md updated and included in commit"
         fi
 
-        print_success "Commit created with semantic message"
     elif ! git diff --quiet; then
         print_warning "You have unstaged changes. Run 'gf -a' first to stage them."
         exit 1
+    else
+        print_warning "No changes to commit"
+        return 0
     fi
 
     # Push to remote
@@ -623,7 +657,7 @@ view_changelog() {
 
 # Function to show help
 show_help() {
-    print_color $CYAN "🚀 GF - Advanced Git Flow Command v1.1.2"
+    print_color $CYAN "🚀 GF - Advanced Git Flow Command v1.1.3"
     echo ""
     print_color $WHITE "USAGE:"
     echo "  gf [OPTION] [ARGUMENTS]"
