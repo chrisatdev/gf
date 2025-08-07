@@ -735,18 +735,6 @@ show_help() {
     print_color $YELLOW "  gf -c 10 git"
     echo "    View git history (10 commits)"
     echo ""
-    print_color $WHITE "FEATURES:"
-    echo "  • Semantic commits with gitmoji integration"
-    echo "  • Automatic CHANGELOG.md generation and maintenance"
-    echo "  • Intelligent commit message generation based on file changes"
-    echo "  • Auto-categorized changelog entries (Added/Fixed/Changed/etc.)"
-    echo "  • Commit format: <hash>: <emoji> <type>: <message> by @user"
-    echo "  • Detailed file status tracking (New/Modified/Deleted/Renamed)"
-    echo "  • Conflict detection and resolution guidance"
-    echo "  • Automatic Merge Request creation"
-    echo "  • Branch naming conventions"
-    echo "  • Colored output for better UX"
-    echo ""
 }
 
 # Main script logic
@@ -762,8 +750,9 @@ main() {
         ;;
     -s | --start)
         if [[ $# -lt 3 ]]; then
-            print_error "Usage: gf -s [TYPE] [NAME]"
-            exit 1
+            # print_error "Usage: gf -s [TYPE] [NAME]"
+            git status
+            exit 0
         fi
         start_branch "$2" "$3"
         ;;
