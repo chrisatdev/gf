@@ -7,560 +7,508 @@
 # Description: Advanced Git workflow automation tool
 # -------------------------------------------------------------------
 
-# Colors for output
+# Colors for better output representation
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
+WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-#Initial cursor setup
-trap 'tput cnorm; exit' INT TERM EXIT
-tput civis
+# Emojis for gitmoji integration
+EMOJI_FEAT="✨"
+EMOJI_FIX="🐛"
+EMOJI_DOCS="📝"
+EMOJI_STYLE="💄"
+EMOJI_REFACTOR="♻️"
+EMOJI_TEST="✅"
+EMOJI_CHORE="🔧"
+EMOJI_HOTFIX="🚨"
+EMOJI_INIT="🎉"
+EMOJI_MERGE="🔀"
+EMOJI_DELETE="🗑️"
 
-# Gitmoji mapping
-declare -A GITMOJI=(
-    ["feat"]="✨"      # New feature
-    ["fix"]="🐛"       # Bug fix
-    ["docs"]="📝"      # Documentation
-    ["style"]="💄"     # Code style
-    ["refactor"]="♻️" # Refactoring
-    ["test"]="✅"      # Testing
-    ["chore"]="🔧"     # Chores
-    ["build"]="👷"     # Build system
-    ["ci"]="⚙️"       # CI configuration
-    ["perf"]="⚡"      # Performance
-    ["revert"]="⏪"    # Revert changes
-)
+# Function to print colored output
+print_color() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
 
-# Initialize CHANGELOG.md if it doesn't exist
-init_changelog() {
-    if [ ! -f "CHANGELOG.md" ]; then
-        echo -e "# CHANGELOG\n\n## [Unreleased]\n### Added\n- Initial version" >CHANGELOG.md
-        git add CHANGELOG.md 2>/dev/null
+# Function to print success message
+print_success() {
+    print_color $GREEN "✅ $1"
+}
+
+# Function to print error message
+print_error() {
+    print_color $RED "❌ $1"
+}
+
+# Function to print warning message
+print_warning() {
+    print_color $YELLOW "⚠️  $1"
+}
+
+# Function to print info message
+print_info() {
+    print_color $BLUE "ℹ️  $1"
+}
+
+# Function to get current git user
+get_git_user() {
+    git config user.name 2>/dev/null || echo "unknown"
+}
+
+# Function to get current branch
+get_current_branch() {
+    git branch --show-current 2>/dev/null
+}
+
+# Function to check if we're in a git repository
+check_git_repo() {
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        print_error "Not a git repository. Please run 'gf -i' to initialize or navigate to a git project."
+        exit 1
     fi
+}
+
+# Function to detect commit type based on file changes
+detect_commit_type() {
+    local modified_files=$(git diff --cached --name-only)
+    local new_files=$(git diff --cached --diff-filter=A --name-only)
+    local deleted_files=$(git diff --cached --diff-filter=D --name-only)
+
+    # Check for specific patterns
+    if echo "$modified_files" | grep -qE "\.(md|txt|rst)$|README|CHANGELOG|docs/"; then
+        echo "docs"
+    elif echo "$modified_files" | grep -qE "test|spec|__tests__|\.test\.|\.spec\."; then
+        echo "test"
+    elif echo "$modified_files" | grep -qE "package\.json|Gemfile|requirements\.txt|composer\.json"; then
+        echo "chore"
+    elif echo "$modified_files" | grep -qE "\.css$|\.scss$|\.sass$|\.less$|\.styl$"; then
+        echo "style"
+    elif [[ -n "$new_files" ]]; then
+        echo "feat"
+    elif [[ -n "$deleted_files" ]]; then
+        echo "chore"
+    else
+        # Default to feat for new functionality or fix for modifications
+        if git diff --cached | grep -q "^+.*function\|^+.*class\|^+.*const\|^+.*let\|^+.*var"; then
+            echo "feat"
+        else
+            echo "fix"
+        fi
+    fi
+}
+
+# Function to get emoji for commit type
+get_emoji_for_type() {
+    case $1 in
+    "feat") echo $EMOJI_FEAT ;;
+    "fix") echo $EMOJI_FIX ;;
+    "docs") echo $EMOJI_DOCS ;;
+    "style") echo $EMOJI_STYLE ;;
+    "refactor") echo $EMOJI_REFACTOR ;;
+    "test") echo $EMOJI_TEST ;;
+    "chore") echo $EMOJI_CHORE ;;
+    "hotfix") echo $EMOJI_HOTFIX ;;
+    *) echo $EMOJI_FEAT ;;
+    esac
+}
+
+# Function to generate commit message
+generate_commit_message() {
+    local commit_type=$(detect_commit_type)
+    local emoji=$(get_emoji_for_type $commit_type)
+    local modified_files=$(git diff --cached --name-only)
+    local files_count=$(echo "$modified_files" | wc -l)
+
+    # Generate short message
+    local short_message=""
+    case $commit_type in
+    "feat")
+        short_message="add new functionality"
+        ;;
+    "fix")
+        short_message="resolve issues and bugs"
+        ;;
+    "docs")
+        short_message="update documentation"
+        ;;
+    "style")
+        short_message="improve code formatting"
+        ;;
+    "refactor")
+        short_message="refactor code structure"
+        ;;
+    "test")
+        short_message="add or update tests"
+        ;;
+    "chore")
+        short_message="update dependencies and tools"
+        ;;
+    esac
+
+    # Generate long message with file list
+    local long_message="Modified files:"
+    while IFS= read -r file; do
+        [[ -n "$file" ]] && long_message="$long_message\n- $file"
+    done <<<"$modified_files"
+
+    local user=$(get_git_user)
+    local branch=$(get_current_branch)
+    long_message="$long_message\n\nBranch: $branch\nAuthor: @$user"
+
+    echo -e "$emoji $commit_type: $short_message\n\n$long_message"
+}
+
+# Function to initialize git flow
+init_git_flow() {
+    print_info "Initializing Git Flow in current directory..."
+
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        print_warning "Git repository already exists."
+    else
+        git init
+        print_success "Git repository initialized"
+    fi
+
+    # Create initial commit if none exists
+    if ! git rev-parse HEAD >/dev/null 2>&1; then
+        git commit --allow-empty -m "$EMOJI_INIT init: initial commit
+
+Repository initialization
+- Created empty repository
+- Ready for development
+
+Author: @$(get_git_user)"
+        print_success "Initial commit created"
+    fi
+
+    # Ensure main branch exists
+    if ! git show-ref --verify --quiet refs/heads/main; then
+        git checkout -b main 2>/dev/null || git branch -M main
+        print_success "Main branch configured"
+    fi
+
+    print_success "Git Flow initialized successfully!"
+}
+
+# Function to start a new branch
+start_branch() {
+    check_git_repo
+
+    local branch_type=$1
+    local branch_name=$2
+
+    if [[ -z "$branch_name" ]]; then
+        print_error "Branch name is required. Usage: gf -s -f <branch-name>"
+        exit 1
+    fi
+
+    # Update repository
+    print_info "Updating repository..."
+    git pull origin main 2>/dev/null || print_warning "Could not pull from origin/main"
+
+    # Switch to main branch
+    git checkout main 2>/dev/null || {
+        print_error "Could not switch to main branch"
+        exit 1
+    }
+
+    # Create and switch to new branch
+    local full_branch_name=""
+    case $branch_type in
+    "feature" | "f")
+        full_branch_name="feature/$branch_name"
+        ;;
+    "hotfix" | "h")
+        full_branch_name="hotfix/$branch_name"
+        ;;
+    "bugfix" | "b")
+        full_branch_name="bugfix/$branch_name"
+        ;;
+    "release" | "r")
+        full_branch_name="release/$branch_name"
+        ;;
+    *)
+        print_error "Invalid branch type. Use: -f (feature), -h (hotfix), -b (bugfix), -r (release)"
+        exit 1
+        ;;
+    esac
+
+    git checkout -b "$full_branch_name"
+    print_success "Created and switched to branch: $full_branch_name"
+}
+
+# Function to add files
+add_files() {
+    check_git_repo
+
+    if [[ $# -eq 0 ]]; then
+        git add .
+        print_success "All changes added to staging area"
+    else
+        git add "$@"
+        print_success "Specified files added to staging area"
+    fi
+
+    # Show status
+    print_info "Current status:"
+    git status --short
+}
+
+# Function to push with automatic commit and MR
+push_changes() {
+    check_git_repo
+
+    local custom_message="$*"
+    local current_branch=$(get_current_branch)
+
+    if [[ -z "$current_branch" ]]; then
+        print_error "Could not determine current branch"
+        exit 1
+    fi
+
+    # Check if there are staged changes
+    if ! git diff --cached --quiet; then
+        # Generate or use custom commit message
+        local commit_message=""
+        if [[ -n "$custom_message" ]]; then
+            local commit_type=$(detect_commit_type)
+            local emoji=$(get_emoji_for_type $commit_type)
+            commit_message="$emoji $commit_type: $custom_message"
+        else
+            commit_message=$(generate_commit_message)
+        fi
+
+        # Create commit
+        git commit -m "$commit_message"
+        print_success "Commit created with semantic message"
+    elif ! git diff --quiet; then
+        print_warning "You have unstaged changes. Run 'gf -a' first to stage them."
+        exit 1
+    fi
+
+    # Push to remote
+    print_info "Pushing to remote repository..."
+    local push_output=$(git push -u origin "$current_branch" 2>&1)
+
+    if [[ $? -eq 0 ]]; then
+        print_success "Successfully pushed to origin/$current_branch"
+
+        # Extract MR URL from push output
+        local mr_url=$(echo "$push_output" | grep -o 'https://[^[:space:]]*/-/merge_requests/new[^[:space:]]*' | head -1)
+
+        if [[ -n "$mr_url" ]]; then
+            print_info "Opening Merge Request in browser..."
+            if command -v xdg-open >/dev/null; then
+                xdg-open "$mr_url" 2>/dev/null &
+            elif command -v open >/dev/null; then
+                open "$mr_url" 2>/dev/null &
+            else
+                print_info "Merge Request URL: $mr_url"
+            fi
+        fi
+    else
+        if echo "$push_output" | grep -q "rejected"; then
+            print_error "Push rejected due to conflicts. Run 'gf -m' to merge latest changes."
+        else
+            print_error "Push failed: $push_output"
+        fi
+        exit 1
+    fi
+}
+
+# Function to merge from main
+merge_from_main() {
+    check_git_repo
+
+    local current_branch=$(get_current_branch)
+
+    if [[ "$current_branch" == "main" ]]; then
+        print_warning "Already on main branch. Nothing to merge."
+        exit 0
+    fi
+
+    print_info "Merging latest changes from main..."
+
+    # Fetch latest changes
+    git fetch origin main
+
+    # Merge with no-ff and no-commit to allow conflict resolution
+    git merge origin/main --no-ff --no-commit
+
+    if [[ $? -eq 0 ]]; then
+        # Check if there are changes to commit
+        if ! git diff --cached --quiet; then
+            local user=$(get_git_user)
+            git commit -m "$EMOJI_MERGE merge: sync with main branch
+
+Merged latest changes from main
+- Updated branch: $current_branch
+- Synchronized with remote changes
+
+Author: @$user"
+            print_success "Successfully merged changes from main"
+        else
+            print_info "No changes to merge from main"
+        fi
+    else
+        print_warning "Merge conflicts detected. Please resolve conflicts and run 'git commit' when ready."
+        print_info "After resolving conflicts, you can continue with 'gf -p' to push your changes."
+    fi
+}
+
+# Function to finish/delete branch
+finish_branch() {
+    check_git_repo
+
+    local current_branch=$(get_current_branch)
+
+    if [[ "$current_branch" == "main" ]]; then
+        print_error "Cannot delete main branch"
+        exit 1
+    fi
+
+    if [[ -z "$current_branch" ]]; then
+        print_error "Could not determine current branch"
+        exit 1
+    fi
+
+    # Switch to main branch
+    git checkout main
+
+    # Delete local branch
+    git branch -D "$current_branch"
+    print_success "Deleted local branch: $current_branch"
+
+    # Delete remote branch (suppress error if it doesn't exist)
+    git push origin --delete "$current_branch" 2>/dev/null &&
+        print_success "Deleted remote branch: $current_branch" ||
+        print_info "Remote branch did not exist or could not be deleted"
 }
 
 # Function to show help
 show_help() {
-    echo -e "${GREEN}🚀 Git Flow Enhanced (gf)${NC}"
-    echo -e "${GREEN} Version: 1.1.2 - by Christian Benítez${NC}"
-    echo -e "${GREEN} GitHub: https://github.com/chrisatdev${NC}"
-    echo -e "${GREEN}   Usage:${NC}"
-    echo -e "  ${CYAN}gf -i${NC}                        ${GREEN}🆕${NC} Initialize new Git repository"
-    echo -e "  ${CYAN}gf -s${NC}                        ${GREEN}✅${NC} Alias to git status"
-    echo -e "  ${CYAN}gf -s -f [name]${NC}              ${GREEN}✨${NC} Create feature branch (feature/name)"
-    echo -e "  ${CYAN}gf -s -h [name]${NC}              ${RED}🐛${NC} Create hotfix branch (hotfix/name)"
-    echo -e "  ${CYAN}gf -s -b [name]${NC}              ${YELLOW}🚑${NC} Create bugfix branch (bugfix/name)"
-    echo -e "  ${CYAN}gf -s -r [name]${NC}              ${BLUE}🚀${NC} Create release branch (release/name)"
-    echo -e "  ${CYAN}gf -a [files]${NC}                ${GREEN}📦${NC} Stage changes (stage all if no files specified)"
-    echo -e "  ${CYAN}gf -p \"[msg]\"${NC}                ${GREEN}💾${NC} Commit (with message) and push, then open MR/PR"
-    echo -e "  ${CYAN}gf -m${NC}                        ${GREEN}🔀${NC} Merge main into current branch (handle conflicts)"
-    echo -e "  ${CYAN}gf -f${NC}                        ${RED}🗑️${NC} Finish and delete current branch (local & remote)"
-    echo -e "  ${CYAN}gf -r [source] [target]${NC}      ${PURPLE}🔄${NC} Create MR from source to target branch (GitLab)"
-    echo -e "  ${CYAN}gf -h${NC}                        ${BLUE}ℹ️${NC} Show this help"
-    echo -e "\n${PURPLE}📚 Examples:${NC}"
-    echo -e "  ${CYAN}gf -i${NC}"
-    echo -e "  ${CYAN}gf -s -f ticket-1000${NC}"
-    echo -e "  ${CYAN}gf -a${NC}"
-    echo -e "  ${CYAN}gf -p \"feat: add new API endpoint\"${NC}"
-    echo -e "  ${CYAN}gf -m${NC}"
-    echo -e "  ${CYAN}gf -f${NC}"
-    echo -e "  ${CYAN}gf -r main dev${NC}"
+    print_color $CYAN "🚀 GF - Advanced Git Flow Command v2.0.0"
+    echo ""
+    print_color $WHITE "USAGE:"
+    echo "  gf [OPTION] [ARGUMENTS]"
+    echo ""
+    print_color $WHITE "OPTIONS:"
+    echo ""
+    print_color $GREEN "  -i, --init"
+    echo "    Initialize git flow in current project"
+    echo "    Creates git repository and initial commit"
+    echo ""
+    print_color $GREEN "  -s, --start [TYPE] [NAME]"
+    echo "    Start a new branch from main with automatic pull"
+    echo "    Types:"
+    echo "      -f, --feature   : Feature branch (feature/name)"
+    echo "      -h, --hotfix    : Hotfix branch (hotfix/name)"
+    echo "      -b, --bugfix    : Bugfix branch (bugfix/name)"
+    echo "      -r, --release   : Release branch (release/name)"
+    echo ""
+    print_color $GREEN "  -a, --add [FILES...]"
+    echo "    Add files to staging area"
+    echo "    Without arguments: adds all changes (git add .)"
+    echo "    With arguments: adds specified files"
+    echo ""
+    print_color $GREEN "  -p, --push [MESSAGE]"
+    echo "    Create semantic commit and push to remote"
+    echo "    Auto-generates commit message or uses provided message"
+    echo "    Automatically opens Merge Request URL"
+    echo ""
+    print_color $GREEN "  -m, --merge"
+    echo "    Merge latest changes from main branch"
+    echo "    Uses --no-ff --no-commit for conflict resolution"
+    echo ""
+    print_color $GREEN "  -f, --finish"
+    echo "    Delete current branch (local and remote)"
+    echo "    Switches to main before deletion"
+    echo ""
+    print_color $GREEN "  -h, --help"
+    echo "    Show this help message"
+    echo ""
+    print_color $WHITE "EXAMPLES:"
+    echo ""
+    print_color $YELLOW "  gf -i"
+    echo "    Initialize git flow"
+    echo ""
+    print_color $YELLOW "  gf -s -f ticket-1000"
+    echo "    Create feature branch 'feature/ticket-1000'"
+    echo ""
+    print_color $YELLOW "  gf -a"
+    echo "    Add all changes to staging"
+    echo ""
+    print_color $YELLOW "  gf -p"
+    echo "    Auto-commit with semantic message and push"
+    echo ""
+    print_color $YELLOW "  gf -p \"implement user authentication\""
+    echo "    Commit with custom message and push"
+    echo ""
+    print_color $YELLOW "  gf -m"
+    echo "    Merge latest changes from main"
+    echo ""
+    print_color $YELLOW "  gf -f"
+    echo "    Delete current branch"
+    echo ""
+    print_color $WHITE "FEATURES:"
+    echo "  • Semantic commits with gitmoji integration"
+    echo "  • Automatic commit message generation"
+    echo "  • Conflict detection and resolution guidance"
+    echo "  • Automatic Merge Request creation"
+    echo "  • Branch naming conventions"
+    echo "  • Colored output for better UX"
+    echo ""
 }
 
-# Function to generate detailed file status information
-generate_file_status() {
-    # Initialize empty status info string
-    local status_info=""
-
-    # New files
-    local new_files=$(git diff --name-only --cached --diff-filter=A)
-    if [ -n "$new_files" ]; then
-        status_info+="\n### 🆕 New files\n"
-        status_info+=$(echo "$new_files" | sed 's/^/- /')
-        status_info+="\n"
+# Main script logic
+main() {
+    if [[ $# -eq 0 ]]; then
+        show_help
+        exit 0
     fi
-
-    # Modified files
-    local modified_files=$(git diff --name-only --cached --diff-filter=M)
-    if [ -n "$modified_files" ]; then
-        status_info+="\n### ✏️ Modified files\n"
-        status_info+=$(echo "$modified_files" | sed 's/^/- /')
-        status_info+="\n"
-    fi
-
-    # Deleted files
-    local deleted_files=$(git diff --name-only --cached --diff-filter=D)
-    if [ -n "$deleted_files" ]; then
-        status_info+="\n### 🗑️ Deleted files\n"
-        status_info+=$(echo "$deleted_files" | sed 's/^/- /')
-        status_info+="\n"
-    fi
-
-    # Renamed files
-    local renamed_files=$(git diff --name-only --cached --diff-filter=R)
-    if [ -n "$renamed_files" ]; then
-        status_info+="\n### 🏷️ Renamed files\n"
-        status_info+=$(echo "$renamed_files" | sed 's/^/- /')
-        status_info+="\n"
-    fi
-
-    echo -e "$status_info"
-}
-
-# Function to detect change type and generate semantic message
-generate_semantic_message() {
-    local staged_files=$(git diff --name-only --cached)
-    local num_changes=$(echo "$staged_files" | grep -c '^')
-
-    if [ $num_changes -eq 0 ]; then
-        echo "🔧 chore: update repository"
-        return 1
-    fi
-
-    # Analyze changes
-    local change_types=$(git diff --name-only --cached | xargs -I {} git diff --cached --name-status {} | cut -f1 | sort | uniq)
-
-    # Determine semantic type
-    local semantic_type="chore"
-    local emoji="🔧"
-
-    # Check for new features (new files with significant code)
-    if echo "$staged_files" | grep -q -E 'src/|lib/|app/|main/'; then
-        if echo "$change_types" | grep -q '^A'; then
-            semantic_type="feat"
-            emoji=${GITMOJI["feat"]}
-        fi
-    fi
-
-    # Check for bug fixes (changes to existing files)
-    if echo "$change_types" | grep -q '^M'; then
-        if echo "$staged_files" | grep -q -E 'fix|bug|error|issue'; then
-            semantic_type="fix"
-            emoji=${GITMOJI["fix"]}
-        fi
-    fi
-
-    # Check for documentation changes
-    if echo "$staged_files" | grep -q -E 'README|docs/|\.md$'; then
-        semantic_type="docs"
-        emoji=${GITMOJI["docs"]}
-    fi
-
-    # Check for style changes
-    if echo "$staged_files" | grep -q -E '\.css$|\.scss$|\.less$|style'; then
-        semantic_type="style"
-        emoji=${GITMOJI["style"]}
-    fi
-
-    # Check for test changes
-    if echo "$staged_files" | grep -q -E 'test/|spec/|__tests__|\.test\.|\.spec\.'; then
-        semantic_type="test"
-        emoji=${GITMOJI["test"]}
-    fi
-
-    # Generate short description
-    local short_desc=""
-    case $semantic_type in
-    "feat") short_desc="Add $(echo "$staged_files" | head -n1 | xargs basename)" ;;
-    "fix") short_desc="Fix issue in $(echo "$staged_files" | head -n1 | xargs basename)" ;;
-    "docs") short_desc="Update documentation" ;;
-    "style") short_desc="Improve code style" ;;
-    "test") short_desc="Add tests" ;;
-    *) short_desc="Update files" ;;
-    esac
-
-    # Generate detailed file status
-    local file_status=$(generate_file_status)
-
-    # Combine messages
-    echo -e "${emoji} ${semantic_type}: ${short_desc}\n\n${file_status}"
-}
-
-# Function to update CHANGELOG.md
-update_changelog() {
-    local commit_message="$1"
-    local changelog_file="CHANGELOG.md"
-
-    if [ ! -f "$changelog_file" ]; then
-        return
-    fi
-
-    # Extract commit type and message
-    local commit_type=$(echo "$commit_message" | grep -o -E '^(feat|fix|docs|style|refactor|test|chore|build|ci|perf|revert)')
-    local commit_desc=$(echo "$commit_message" | sed -E 's/^[^:]+: //' | head -n1)
-
-    # Map commit type to changelog section
-    case $commit_type in
-    "feat") local section="### Added" ;;
-    "fix") local section="### Fixed" ;;
-    *) local section="### Changed" ;;
-    esac
-
-    # Update CHANGELOG.md
-    if grep -q "## \[Unreleased\]" "$changelog_file"; then
-        # Add to existing Unreleased section
-        if ! grep -q "$section" "$changelog_file"; then
-            # Section doesn't exist yet, add it
-            sed -i "/## \[Unreleased\]/a $section\n- $commit_desc" "$changelog_file"
-        else
-            # Section exists, append to it
-            sed -i "/$section/a - $commit_desc" "$changelog_file"
-        fi
-    else
-        # Create new Unreleased section
-        echo -e "## [Unreleased]\n$section\n- $commit_desc\n\n$(cat "$changelog_file")" >"$changelog_file"
-    fi
-
-    # Stage CHANGELOG.md changes
-    git add "$changelog_file" 2>/dev/null
-}
-
-# Initialize repository
-init_repo() {
-    echo -e "${GREEN}🆕 Initializing new Git repository...${NC}"
-    git init
-    if [ $? -eq 0 ]; then
-        init_changelog
-        git commit --allow-empty -m "${GITMOJI["chore"]} chore: Initial commit"
-        echo -e "${GREEN}✅ Repository initialized with empty commit${NC}"
-    else
-        echo -e "${RED}❌ Error initializing repository${NC}"
-        exit 1
-    fi
-}
-
-# Create new branch
-start_branch() {
-    local branch_type=""
-    local branch_name=""
-    local emoji=""
 
     case $1 in
-    -f)
-        branch_type="feature"
-        emoji="✨"
+    -i | --init)
+        init_git_flow
         ;;
-    -h)
-        branch_type="hotfix"
-        emoji="🐛"
+    -s | --start)
+        if [[ $# -lt 3 ]]; then
+            print_error "Usage: gf -s [TYPE] [NAME]"
+            exit 1
+        fi
+        start_branch "$2" "$3"
         ;;
-    -b)
-        branch_type="bugfix"
-        emoji="🚑"
+    -a | --add)
+        shift
+        add_files "$@"
         ;;
-    -r)
-        branch_type="release"
-        emoji="🚀"
+    -p | --push)
+        shift
+        push_changes "$@"
+        ;;
+    -m | --merge)
+        merge_from_main
+        ;;
+    -f | --finish)
+        finish_branch
+        ;;
+    -h | --help)
+        show_help
         ;;
     *)
-        echo -e "${RED}❌ Invalid branch type. Use -f, -h, -b or -r${NC}"
+        print_error "Unknown option: $1"
+        echo "Use 'gf -h' for help"
         exit 1
         ;;
     esac
-
-    branch_name="$2"
-
-    if [ -z "$branch_name" ]; then
-        echo -e "${RED}❌ Branch name is required${NC}"
-        show_help
-        exit 1
-    fi
-
-    full_branch_name="$branch_type/$branch_name"
-
-    echo -e "${GREEN}🔄 Updating main branch...${NC}"
-    git checkout main 2>/dev/null || git checkout -b main
-    git pull origin main
-
-    if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}⚠️ Couldn't pull from origin/main. Using local main branch${NC}"
-    fi
-
-    echo -e "${GREEN}🌱 Creating branch: ${CYAN}$full_branch_name ${emoji}${NC}"
-    git checkout -b "$full_branch_name"
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Branch ${CYAN}$full_branch_name ${GREEN}created${NC}"
-    else
-        echo -e "${RED}❌ Error creating branch${NC}"
-        exit 1
-    fi
 }
 
-# Stage changes
-add_changes() {
-    if [ -z "$1" ]; then
-        echo -e "${GREEN}📦 Staging all changes...${NC}"
-        git add .
-    else
-        echo -e "${GREEN}📦 Staging specified files...${NC}"
-        git add "$@"
-    fi
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Changes staged${NC}"
-    else
-        echo -e "${RED}❌ Error staging changes${NC}"
-        exit 1
-    fi
-}
-
-# Commit and push
-commit_and_push() {
-    local commit_message="$1"
-
-    # Get current branch early for main branch check
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-
-    # Skip MR creation for main branch
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${YELLOW}⚠️  No MR will be created for main branch${NC}"
-
-        if [ -z "$commit_message" ]; then
-            commit_message=$(generate_semantic_message)
-            if [ $? -ne 0 ]; then
-                echo -e "${RED}❌ No changes to commit${NC}"
-                exit 1
-            fi
-            short_msg=$(echo "$commit_message" | head -n1)
-            emoji=$(echo "$short_msg" | grep -o -E '✨|🐛|📝|💄|♻️|✅|🔧|👷|⚙️|⚡|⏪')
-            echo -e "${YELLOW}📝 Auto-generated commit message: ${PURPLE}$short_msg ${emoji}${NC}"
-        fi
-
-        # Resto del proceso normal de commit/push sin MR
-        update_changelog "$(echo "$commit_message" | head -n1)"
-        echo -e "${GREEN}💾 Creating commit...${NC}"
-        local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^###/*/g' | sed 's/^🆕/**New files**/g' | sed 's/^✏️/**Modified files**/g')
-        git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
-
-        echo -e "${GREEN}📤 Pushing to ${CYAN}main${GREEN}...${NC}"
-        git push origin main
-        return # Salir temprano para rama main
-    fi
-
-    if [ -z "$commit_message" ]; then
-        commit_message=$(generate_semantic_message)
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}❌ No changes to commit${NC}"
-            exit 1
-        fi
-        short_msg=$(echo "$commit_message" | head -n1)
-        emoji=$(echo "$short_msg" | grep -o -E '✨|🐛|📝|💄|♻️|✅|🔧|👷|⚙️|⚡|⏪')
-        echo -e "${YELLOW}📝 Auto-generated commit message: ${PURPLE}$short_msg ${emoji}${NC}"
-    else
-        # Add gitmoji if not present in custom message
-        if ! grep -q -E '✨|🐛|📝|💄|♻️|✅|🔧|👷|⚙️|⚡|⏪' <<<"$commit_message"; then
-            # Try to detect type from message
-            if [[ "$commit_message" =~ ^feat ]]; then
-                commit_message="${GITMOJI["feat"]} $commit_message"
-            elif [[ "$commit_message" =~ ^fix ]]; then
-                commit_message="${GITMOJI["fix"]} $commit_message"
-            elif [[ "$commit_message" =~ ^docs ]]; then
-                commit_message="${GITMOJI["docs"]} $commit_message"
-            else
-                commit_message="${GITMOJI["chore"]} $commit_message"
-            fi
-        fi
-    fi
-
-    # Update CHANGELOG.md before committing
-    update_changelog "$(echo "$commit_message" | head -n1)"
-
-    echo -e "${GREEN}💾 Creating commit...${NC}"
-    local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^• /- /g')
-    git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
-
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}❌ Error creating commit${NC}"
-        exit 1
-    fi
-
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-    echo -e "${GREEN}📤 Pushing to ${CYAN}$current_branch${GREEN}...${NC}"
-    git push -u origin "$current_branch"
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Push successful${NC}"
-        # Open MR/PR URL
-        remote_url=$(git remote get-url origin | sed 's/\.git$//' | sed 's/git@\(.*\):/\1\//' | sed 's/https:\/\///')
-        if [[ $remote_url == *"gitlab"* ]]; then
-            mr_url="https://${remote_url}/-/merge_requests/new?merge_request[source_branch]=${current_branch}"
-            echo -e "${CYAN}🔗 Opening Merge Request...${NC}"
-            xdg-open "$mr_url" 2>/dev/null || open "$mr_url" 2>/dev/null || start "$mr_url" 2>/dev/null
-            exit 0
-        elif [[ $remote_url == *"github"* ]]; then
-            pr_url="https://${remote_url}/compare/${current_branch}?expand=1"
-            echo -e "${CYAN}🔗 Opening Pull Request...${NC}"
-            xdg-open "$pr_url" 2>/dev/null || open "$pr_url" 2>/dev/null || start "$pr_url" 2>/dev/null
-            exit 0
-        fi
-    else
-        echo -e "${RED}❌ Error pushing changes${NC}"
-        echo -e "${YELLOW}⚠️ If conflicts exist, run: ${CYAN}gf -m${NC}"
-        exit 1
-    fi
-}
-
-# Merge main into current branch
-merge_main() {
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${RED}❌ Cannot merge main into itself${NC}"
-        exit 1
-    fi
-
-    # Check for uncommitted changes
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo -e "${YELLOW}⚠️  Uncommitted changes detected${NC}"
-        read -p "Do you want to commit these changes before merging? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            git add .
-            commit_message="${GITMOJI["chore"]} chore: Auto-commit before merge"
-            git commit -m "$commit_message"
-        fi
-    fi
-
-    echo -e "${GREEN}🔄 Updating main branch...${NC}"
-    git fetch origin main
-
-    echo -e "${GREEN}🔀 Merging main into ${CYAN}$current_branch${GREEN}...${NC}"
-    git merge --no-ff --no-commit origin/main
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Merge successful${NC}"
-        echo -e "${YELLOW}📝 Review changes and commit when ready${NC}"
-    else
-        echo -e "${RED}❌ Merge conflicts detected${NC}"
-        echo -e "${YELLOW}✏️ Resolve conflicts and commit manually${NC}"
-        exit 1
-    fi
-}
-
-# Finish and delete branch
-finish_branch() {
-    current_branch=$(git rev-parse --abbrev-ref HEAD)
-
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${RED}❌ Cannot delete main branch${NC}"
-        exit 1
-    fi
-
-    echo -e "${GREEN}🔄 Switching to main branch...${NC}"
-    git checkout main
-
-    echo -e "${GREEN}📥 Pulling latest changes...${NC}"
-    git pull origin main
-
-    echo -e "${GREEN}🗑️ Deleting local branch ${CYAN}$current_branch${GREEN}...${NC}"
-    git branch -D "$current_branch"
-
-    echo -e "${GREEN}♻️ Attempting to delete remote branch...${NC}"
-    git push origin --delete "$current_branch" 2>/dev/null
-
-    echo -e "${GREEN}✅ Branch ${CYAN}$current_branch ${GREEN}cleaned up${NC}"
-}
-
-# Create MR between branches (GitLab specific)
-create_mr() {
-    local source_branch=$1
-    local target_branch=$2
-
-    if [ -z "$source_branch" ] || [ -z "$target_branch" ]; then
-        echo -e "${RED}❌ Both source and target branches are required${NC}"
-        echo -e "${YELLOW}Usage: gf -r source target${NC}"
-        exit 1
-    fi
-
-    # Verify we're using GitLab
-    remote_url=$(git remote get-url origin | sed 's/\.git$//' | sed 's/git@\(.*\):/\1\//' | sed 's/https:\/\///')
-    if [[ ! $remote_url == *"gitlab"* ]]; then
-        echo -e "${RED}❌ MR creation is only supported for GitLab repositories${NC}"
-        exit 1
-    fi
-
-    echo -e "${GREEN}🔄 Creating MR from ${CYAN}$source_branch${GREEN} to ${CYAN}$target_branch${GREEN}...${NC}"
-
-    # Get current branch to return later
-    local current_branch=$(git rev-parse --abbrev-ref HEAD)
-
-    # Checkout source branch and push if needed
-    git checkout "$source_branch"
-    git push --set-upstream origin "$source_branch" 2>/dev/null
-
-    # Create MR URL
-    mr_url="https://${remote_url}/-/merge_requests/new?merge_request[source_branch]=${source_branch}&merge_request[target_branch]=${target_branch}"
-
-    echo -e "${GREEN}✅ MR created${NC}"
-    echo -e "${CYAN}🔗 Opening Merge Request...${NC}"
-    xdg-open "$mr_url" 2>/dev/null || open "$mr_url" 2>/dev/null || start "$mr_url" 2>/dev/null
-
-    # Return to original branch
-    git checkout "$current_branch" 2>/dev/null
-    exit 0
-}
-
-# Main execution
-if [ "$1" != "-h" ]; then
-    init_changelog
-fi
-
-if [ $# -eq 0 ]; then
-    show_help
-    exit 0
-fi
-
-case $1 in
--i)
-    init_repo
-    exit 0
-    ;;
--s)
-    if [[ -z "$2" ]]; then
-        git status
-    else
-        shift
-        start_branch "$@"
-    fi
-    exit 0
-    ;;
--a)
-    shift
-    add_changes "$@"
-    exit 0
-    ;;
--p)
-    shift
-    commit_and_push "$*"
-    exit 0
-    ;;
--m)
-    merge_main
-    exit 0
-    ;;
--f)
-    finish_branch
-    exit 0
-    ;;
--r)
-    shift
-    create_mr "$@"
-    exit 0
-    ;;
--h)
-    show_help
-    exit 0
-    ;;
-*)
-    echo -e "${RED}❌ Invalid option. Use -h for help.${NC}"
-    exit 1
-    ;;
-esac
-
-# Restore cursor
-tput cnorm
+# Execute main function with all arguments
+main "$@"
