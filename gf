@@ -1,7 +1,7 @@
 #!/bin/bash
 # -------------------------------------------------------------------
 # Git Flow Enhanced (gf)
-# Version: 1.1.2
+# Version: 1.1.3
 # Author: Christian Benítez
 # GitHub: https://github.com/chrisatdev
 # Description: Advanced Git workflow automation tool
@@ -152,17 +152,43 @@ generate_commit_message() {
         ;;
     esac
 
-    # Generate long message with file list
+    # Generate changelog-compatible format
+    local user=$(get_git_user)
+    local branch=$(get_current_branch)
+
+    # Main commit message in changelog format
+    local commit_message="$emoji $commit_type: $short_message by @$user"
+
+    # Detailed description for commit body
     local long_message="Modified files:"
     while IFS= read -r file; do
         [[ -n "$file" ]] && long_message="$long_message\n- $file"
     done <<<"$modified_files"
 
-    local user=$(get_git_user)
-    local branch=$(get_current_branch)
-    long_message="$long_message\n\nBranch: $branch\nAuthor: @$user"
+    long_message="$long_message\n\nBranch: $branch"
 
-    echo -e "$emoji $commit_type: $short_message\n\n$long_message"
+    echo -e "$commit_message\n\n$long_message"
+}
+
+# Function to generate changelog
+generate_changelog() {
+    check_git_repo
+
+    local limit=${1:-10}     # Default to last 10 commits
+    local format=${2:-"all"} # "all" or "current-branch"
+
+    print_info "Generating changelog (last $limit commits)..."
+
+    if [[ "$format" == "current-branch" ]]; then
+        # Only commits from current branch
+        git log --oneline -n "$limit" --pretty=format:"%C(yellow)%h%C(reset): %s"
+    else
+        # All commits
+        git log --oneline -n "$limit" --all --pretty=format:"%C(yellow)%h%C(reset): %s"
+    fi
+
+    echo ""
+    print_success "Changelog generated successfully!"
 }
 
 # Function to initialize git flow
@@ -178,13 +204,12 @@ init_git_flow() {
 
     # Create initial commit if none exists
     if ! git rev-parse HEAD >/dev/null 2>&1; then
-        git commit --allow-empty -m "$EMOJI_INIT init: initial commit
+        local user=$(get_git_user)
+        git commit --allow-empty -m "$EMOJI_INIT init: initial commit by @$user
 
 Repository initialization
 - Created empty repository
-- Ready for development
-
-Author: @$(get_git_user)"
+- Ready for development"
         print_success "Initial commit created"
     fi
 
@@ -280,7 +305,8 @@ push_changes() {
         if [[ -n "$custom_message" ]]; then
             local commit_type=$(detect_commit_type)
             local emoji=$(get_emoji_for_type $commit_type)
-            commit_message="$emoji $commit_type: $custom_message"
+            local user=$(get_git_user)
+            commit_message="$emoji $commit_type: $custom_message by @$user"
         else
             commit_message=$(generate_commit_message)
         fi
@@ -346,13 +372,11 @@ merge_from_main() {
         # Check if there are changes to commit
         if ! git diff --cached --quiet; then
             local user=$(get_git_user)
-            git commit -m "$EMOJI_MERGE merge: sync with main branch
+            git commit -m "$EMOJI_MERGE merge: sync with main branch by @$user
 
 Merged latest changes from main
 - Updated branch: $current_branch
-- Synchronized with remote changes
-
-Author: @$user"
+- Synchronized with remote changes"
             print_success "Successfully merged changes from main"
         else
             print_info "No changes to merge from main"
@@ -394,7 +418,7 @@ finish_branch() {
 
 # Function to show help
 show_help() {
-    print_color $CYAN "🚀 GF - Advanced Git Flow Command v2.0.0"
+    print_color $CYAN "🚀 GF - Advanced Git Flow Command v1.1.3"
     echo ""
     print_color $WHITE "USAGE:"
     echo "  gf [OPTION] [ARGUMENTS]"
@@ -431,6 +455,11 @@ show_help() {
     echo "    Delete current branch (local and remote)"
     echo "    Switches to main before deletion"
     echo ""
+    print_color $GREEN "  -c, --changelog [LIMIT] [FORMAT]"
+    echo "    Generate changelog with commit history"
+    echo "    LIMIT: number of commits (default: 10)"
+    echo "    FORMAT: 'all' or 'current-branch' (default: all)"
+    echo ""
     print_color $GREEN "  -h, --help"
     echo "    Show this help message"
     echo ""
@@ -457,13 +486,21 @@ show_help() {
     print_color $YELLOW "  gf -f"
     echo "    Delete current branch"
     echo ""
+    print_color $YELLOW "  gf -c"
+    echo "    Generate changelog (last 10 commits)"
+    echo ""
+    print_color $YELLOW "  gf -c 20 current-branch"
+    echo "    Generate changelog for current branch (last 20 commits)"
+    echo ""
     print_color $WHITE "FEATURES:"
     echo "  • Semantic commits with gitmoji integration"
     echo "  • Automatic commit message generation"
+    echo "  • Changelog format: <hash>: <emoji> <type>: <message> by @user"
     echo "  • Conflict detection and resolution guidance"
     echo "  • Automatic Merge Request creation"
     echo "  • Branch naming conventions"
     echo "  • Colored output for better UX"
+    echo "  • Changelog generation with git history"
     echo ""
 }
 
@@ -498,6 +535,10 @@ main() {
         ;;
     -f | --finish)
         finish_branch
+        ;;
+    -c | --changelog)
+        shift
+        generate_changelog "$@"
         ;;
     -h | --help)
         show_help
