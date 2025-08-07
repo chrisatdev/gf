@@ -415,11 +415,18 @@ push_changes() {
     check_git_repo
 
     local custom_message="$*"
-    local current_branch=$(get_current_branch)
+
+    # Get current branch early for main branch check
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
 
     if [[ -z "$current_branch" ]]; then
         print_error "Could not determine current branch"
         exit 1
+    fi
+
+    # Skip MR creation for main branch
+    if [ "$current_branch" = "main" ]; then
+        print_warning "No MR will be created for main branch"
     fi
 
     # Initialize changelog if it doesn't exist
@@ -482,7 +489,13 @@ push_changes() {
     if [[ $? -eq 0 ]]; then
         print_success "Successfully pushed to origin/$current_branch"
 
-        # Generate MR/PR URL
+        # Skip MR creation for main branch
+        if [ "$current_branch" = "main" ]; then
+            print_info "Push to main completed successfully"
+            return 0
+        fi
+
+        # Generate MR/PR URL for non-main branches
         local remote_url=$(git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's/git@\(.*\):/https:\/\/\1\//' | sed 's/ssh:\/\/git@/https:\/\//')
         local mr_url=""
 
@@ -638,6 +651,7 @@ show_help() {
     echo "    Create semantic commit and push to remote"
     echo "    Auto-generates commit message or uses provided message"
     echo "    Automatically updates CHANGELOG.md and opens MR URL"
+    echo "    Note: No MR created when on main branch"
     echo ""
     print_color $GREEN "  -m, --merge"
     echo "    Merge latest changes from main branch"
