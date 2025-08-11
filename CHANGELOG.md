@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Maintenance
+- `dfcc051`: update configuration and dependencies by @Christian
 - `645a3f5`: update configuration and dependencies by @Christian
 - `d9c7e12`: update configuration and dependencies by @Christian
 ### Documentation

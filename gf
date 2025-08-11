@@ -391,20 +391,20 @@ start_branch() {
         print_error "Could not switch to main branch"
         exit 1
     }
-
+    echo $branch_type
     # Create and switch to new branch
     local full_branch_name=""
     case $branch_type in
-    "feature" | "f")
+    "--feature" | "-f")
         full_branch_name="feature/$branch_name"
         ;;
-    "hotfix" | "h")
+    "--hotfix" | "-h")
         full_branch_name="hotfix/$branch_name"
         ;;
-    "bugfix" | "b")
+    "--bugfix" | "-b")
         full_branch_name="bugfix/$branch_name"
         ;;
-    "release" | "r")
+    "--release" | "-r")
         full_branch_name="release/$branch_name"
         ;;
     *)
