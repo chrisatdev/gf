@@ -25,7 +25,7 @@ print_error() {
 
 # Check if running as root for global installation
 if [[ $EUID -eq 0 ]]; then
-    INSTALL_DIR="/usr/local/bin"
+    INSTALL_DIR="/usr/bin"
     print_info "Installing globally to $INSTALL_DIR"
 else
     # Install to user's local bin
