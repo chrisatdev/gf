@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+- [chore] update codebase (1 file) by @cbenitezdiaz@gmail.com
 - [chore] update codebase (1 file) by @Christian Benitez
 ### Maintenance
 - `439ff5d`: update configuration and dependencies by @Christian

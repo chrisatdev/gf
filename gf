@@ -46,9 +46,10 @@ init_changelog() {
 # Function to get GitLab username
 get_gitlab_user() {
     # Try to get from git config first
-    local git_user=$(git config user.email 2>/dev/null)
+    local git_user=$(git config user.name 2>/dev/null)
+    local git_user_email=$(git config user.email 2>/dev/null)
     if [ -n "$git_user" ]; then
-        echo "$git_user"
+        echo "[$git_user]($git_user_email)"
         return
     fi
 
