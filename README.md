@@ -96,7 +96,7 @@ gf -f
 gf -r main dev
 ```
 
-## 🌈 Gitmoji Support
+## ✨ Gitmoji Support
 
 Automatically adds appropriate emojis based on commit type:
 
