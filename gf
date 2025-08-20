@@ -301,20 +301,20 @@ update_changelog() {
     "refactor") local section="### Refactored" ;;
     "test") local section="### Testing" ;;
     "build") local section="### Build" ;;
-    "ci") local section="### CI/CD" ;;
+    "ci") local section="### CI_CD" ;;
     "perf") local section="### Performance" ;;
     *) local section="### Changed" ;;
     esac
 
     # Update CHANGELOG.md
     if grep -q "## \[Unreleased\]" "$changelog_file"; then
-        # Check if section exists
-        if ! grep -A 20 "## \[Unreleased\]" "$changelog_file" | grep -q "$section"; then
+        # Check if section exists using fixed string search
+        if ! grep -A 20 "## \[Unreleased\]" "$changelog_file" | grep -Fq "$section"; then
             # Section doesn't exist, add it after Unreleased
             sed -i "/## \[Unreleased\]/a\\$section\n- $changelog_entry" "$changelog_file"
         else
-            # Section exists, append to it
-            sed -i "/$section/a\\- $changelog_entry" "$changelog_file"
+            # Section exists, append to it using fixed string search
+            sed -i "/$(echo "$section" | sed 's/[[\.*^$()+?{|]/\\&/g')/a\\- $changelog_entry" "$changelog_file"
         fi
     else
         # Create new Unreleased section
