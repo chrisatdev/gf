@@ -1,7 +1,7 @@
 #!/bin/bash
 # -------------------------------------------------------------------
 # Git Flow Enhanced (gf)
-# Version: 1.2.0
+# Version: 1.3.0
 # Author: Christian Benítez
 # GitHub: https://github.com/chrisatdev
 # Description: Advanced Git workflow automation tool
@@ -35,11 +35,147 @@ declare -A GITMOJI=(
     ["revert"]="⏪"    # Revert changes
 )
 
-# Initialize CHANGELOG.md if it doesn't exist
-init_changelog() {
+# Function to get current month-year for archiving
+get_current_month_year() {
+    date +"%Y-%m"
+}
+
+# Function to get month-year from 6 months ago
+get_six_months_ago() {
+    date -d "6 months ago" +"%Y-%m" 2>/dev/null || date -j -v-6m +"%Y-%m" 2>/dev/null || echo "2024-01"
+}
+
+# Function to check if current CHANGELOG.md is from previous month
+is_changelog_from_previous_month() {
     if [ ! -f "CHANGELOG.md" ]; then
-        echo -e "# CHANGELOG\n\n## [Unreleased]\n### Added\n- Initial version" >CHANGELOG.md
-        git add CHANGELOG.md 2>/dev/null
+        return 1
+    fi
+
+    # Get the last modification date of CHANGELOG.md
+    local last_modified
+    if command -v stat >/dev/null 2>&1; then
+        # Linux/GNU stat
+        last_modified=$(stat -c %Y "CHANGELOG.md" 2>/dev/null)
+        if [ -z "$last_modified" ]; then
+            # macOS/BSD stat
+            last_modified=$(stat -f %m "CHANGELOG.md" 2>/dev/null)
+        fi
+    else
+        return 1
+    fi
+
+    if [ -z "$last_modified" ]; then
+        return 1
+    fi
+
+    # Convert to month-year format
+    local file_month_year
+    if command -v date >/dev/null 2>&1; then
+        file_month_year=$(date -d "@$last_modified" +"%Y-%m" 2>/dev/null || date -r "$last_modified" +"%Y-%m" 2>/dev/null)
+    else
+        return 1
+    fi
+
+    local current_month_year=$(get_current_month_year)
+
+    if [ "$file_month_year" != "$current_month_year" ]; then
+        return 0 # Is from previous month
+    else
+        return 1 # Is from current month
+    fi
+}
+
+# Function to archive current changelog
+archive_changelog() {
+    if [ ! -f "CHANGELOG.md" ]; then
+        return
+    fi
+
+    # Create changelogs directory if it doesn't exist
+    if [ ! -d "changelogs" ]; then
+        mkdir -p "changelogs"
+        echo -e "${GREEN}📁 Created changelogs directory${NC}"
+    fi
+
+    # Get the last modification date for naming
+    local last_modified
+    if command -v stat >/dev/null 2>&1; then
+        last_modified=$(stat -c %Y "CHANGELOG.md" 2>/dev/null)
+        if [ -z "$last_modified" ]; then
+            last_modified=$(stat -f %m "CHANGELOG.md" 2>/dev/null)
+        fi
+    fi
+
+    local archive_name
+    if [ -n "$last_modified" ]; then
+        local file_month_year=$(date -d "@$last_modified" +"%Y-%m" 2>/dev/null || date -r "$last_modified" +"%Y-%m" 2>/dev/null)
+        archive_name="CHANGELOG-${file_month_year}.md"
+    else
+        # Fallback to previous month if we can't get the date
+        local prev_month=$(date -d "1 month ago" +"%Y-%m" 2>/dev/null || date -j -v-1m +"%Y-%m" 2>/dev/null || echo "2024-01")
+        archive_name="CHANGELOG-${prev_month}.md"
+    fi
+
+    # Move current changelog to archive
+    mv "CHANGELOG.md" "changelogs/$archive_name"
+    echo -e "${GREEN}📦 Archived changelog as ${CYAN}changelogs/$archive_name${NC}"
+
+    # Stage the archived file
+    git add "changelogs/$archive_name" 2>/dev/null
+}
+
+# Function to clean old changelog archives (6+ months)
+clean_old_changelogs() {
+    if [ ! -d "changelogs" ]; then
+        return
+    fi
+
+    local six_months_ago=$(get_six_months_ago)
+    local files_deleted=0
+
+    # Find and remove old changelog files
+    for file in changelogs/CHANGELOG-*.md; do
+        if [ -f "$file" ]; then
+            # Extract date from filename (CHANGELOG-YYYY-MM.md)
+            local file_date=$(echo "$file" | sed -n 's/.*CHANGELOG-\([0-9]\{4\}-[0-9]\{2\}\)\.md/\1/p')
+
+            if [ -n "$file_date" ]; then
+                # Compare dates (simple string comparison works for YYYY-MM format)
+                if [ "$file_date" \< "$six_months_ago" ]; then
+                    echo -e "${YELLOW}🗑️  Removing old changelog: ${CYAN}$file${NC}"
+                    git rm "$file" 2>/dev/null || rm "$file"
+                    files_deleted=$((files_deleted + 1))
+                fi
+            fi
+        fi
+    done
+
+    if [ $files_deleted -gt 0 ]; then
+        echo -e "${GREEN}✅ Cleaned $files_deleted old changelog(s) (6+ months old)${NC}"
+    fi
+}
+
+# Function to create new changelog for current month
+create_new_changelog() {
+    local current_date=$(date +"%B %Y")
+    echo -e "# CHANGELOG\n\n## [Unreleased] - $current_date\n### Added\n- New changelog for $current_date" >CHANGELOG.md
+    git add CHANGELOG.md 2>/dev/null
+    echo -e "${GREEN}📝 Created new changelog for ${CYAN}$current_date${NC}"
+}
+
+# Initialize CHANGELOG.md with monthly rotation logic
+init_changelog() {
+    # Clean old changelogs first
+    clean_old_changelogs
+
+    # Check if current changelog exists and is from previous month
+    if [ -f "CHANGELOG.md" ] && is_changelog_from_previous_month; then
+        echo -e "${YELLOW}📅 Changelog is from previous month, archiving...${NC}"
+        archive_changelog
+        create_new_changelog
+    elif [ ! -f "CHANGELOG.md" ]; then
+        # No changelog exists, create new one
+        create_new_changelog
     fi
 }
 
@@ -47,9 +183,8 @@ init_changelog() {
 get_gitlab_user() {
     # Try to get from git config first
     local git_user=$(git config user.name 2>/dev/null)
-    local git_user_email=$(git config user.email 2>/dev/null)
     if [ -n "$git_user" ]; then
-        echo "[$git_user]($git_user_email)"
+        echo "$git_user"
         return
     fi
 
@@ -71,7 +206,7 @@ get_gitlab_user() {
 # Function to show help
 show_help() {
     echo -e "${GREEN}🚀 Git Flow Enhanced (gf)${NC}"
-    echo -e "${GREEN} Version: 1.2.0 - by Christian Benítez${NC}"
+    echo -e "${GREEN} Version: 1.3.0 - by Christian Benítez${NC}"
     echo -e "${GREEN} GitHub: https://github.com/chrisatdev${NC}"
     echo -e "${GREEN}   Usage:${NC}"
     echo -e "  ${CYAN}gf -i${NC}                        ${GREEN}🆕${NC} Initialize new Git repository"
@@ -318,8 +453,9 @@ update_changelog() {
             sed -i "/$(echo "$section" | sed 's/[[\.*^$()+?{|]/\\&/g')/a\\- $changelog_entry" "$changelog_file"
         fi
     else
-        # Create new Unreleased section
-        echo -e "## [Unreleased]\n$section\n- $changelog_entry\n\n$(cat "$changelog_file")" >"$changelog_file"
+        # Create new Unreleased section with current month
+        local current_date=$(date +"%B %Y")
+        echo -e "## [Unreleased] - $current_date\n$section\n- $changelog_entry\n\n$(cat "$changelog_file")" >"$changelog_file"
     fi
 
     # Stage CHANGELOG.md changes
@@ -614,6 +750,10 @@ create_mr() {
 
 # Main execution
 if [ "$1" != "-h" ]; then
+    # Show archive status message only if there are files to process
+    if [ -f "CHANGELOG.md" ] && is_changelog_from_previous_month; then
+        echo -e "${BLUE}📅 Checking changelog rotation...${NC}"
+    fi
     init_changelog
 fi
 
