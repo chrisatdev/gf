@@ -71,10 +71,7 @@ curl -o gf https://raw.githubusercontent.com/chrisatdev/gf/main/gf
 chmod +x gf
 sudo mv gf /usr/local/bin/
 
-# Method 2: Using Homebrew (if you have a custom formula)
-# brew install chrisatdev/tap/gf
-
-# Method 3: Install to user directory
+# Method 2: Install to user directory
 mkdir -p ~/bin
 mv gf ~/bin/
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc  # or ~/.bash_profile
