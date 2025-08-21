@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - [docs] update documentation (1 file) by @Christian Benitez
 - [docs] update documentation (1 file) by @Christian Benitez
+- [docs] update documentation (1 file) by @Christian Benitez
 - [docs] update documentation (2 files) by @Christian Benitez
 
 ### Changed

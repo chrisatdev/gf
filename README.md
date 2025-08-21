@@ -72,8 +72,7 @@ chmod +x gf
 sudo mv gf /usr/local/bin/
 
 # Method 2: Using Homebrew
-brew tap chrisatdev/tap
-brew install gf
+brew install chrisatdev/tap/gf
 
 # Method 3: Install to user directory
 mkdir -p ~/bin
