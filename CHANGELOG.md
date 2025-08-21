@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [docs] update documentation (2 files) by @Christian Benitez
 
 ### Changed
+- [chore] update codebase (1 file) by @Christian Benitez
 
 - [chore] update codebase (1 file) by @Christian Benitez
 - [chore] update codebase (1 file) by @cbenitezdiaz@gmail.com

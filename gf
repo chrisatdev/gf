@@ -42,7 +42,7 @@ get_current_month_year() {
 
 # Function to get month-year from 6 months ago
 get_six_months_ago() {
-    date -d "6 months ago" +"%Y-%m" 2>/dev/null || date -j -v-6m +"%Y-%m" 2>/dev/null || echo "2024-01"
+    date -d "6 months ago" +"%Y-%m" 2>/dev/null || date -j -v-6m +"%Y-%m" 2>/dev/null || echo "2025-01"
 }
 
 # Function to check if current CHANGELOG.md is from previous month
