@@ -478,6 +478,7 @@ init_repo() {
 
 # Create new branch
 start_branch() {
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
     local branch_type=""
     local branch_name=""
     local emoji=""
@@ -515,12 +516,12 @@ start_branch() {
 
     full_branch_name="$branch_type/$branch_name"
 
-    echo -e "${GREEN}🔄 Updating main branch...${NC}"
-    git checkout main 2>/dev/null || git checkout -b main
-    git pull origin main
+    echo -e "${GREEN}🔄 Updating $current_branch branch...${NC}"
+    git checkout $current_branch 2>/dev/null || git checkout -b $current_branch
+    git pull origin $current_branch
 
     if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}⚠️ Couldn't pull from origin/main. Using local main branch${NC}"
+        echo -e "${YELLOW}⚠️ Couldn't pull from origin/$current_branch. Using local $current_branch branch${NC}"
     fi
 
     echo -e "${GREEN}🌱 Creating branch: ${CYAN}$full_branch_name ${emoji}${NC}"
@@ -669,10 +670,10 @@ merge_main() {
         fi
     fi
 
-    echo -e "${GREEN}🔄 Updating main branch...${NC}"
+    echo -e "${GREEN}🔄 Updating $current_branch branch...${NC}"
     git fetch origin main
 
-    echo -e "${GREEN}🔀 Merging main into ${CYAN}$current_branch${GREEN}...${NC}"
+    echo -e "${GREEN}🔀 Merging $current_branch into ${CYAN}$current_branch${GREEN}...${NC}"
     git merge --no-ff --no-commit origin/main
 
     if [ $? -eq 0 ]; then
