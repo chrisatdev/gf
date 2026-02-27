@@ -1,7 +1,7 @@
 #!/bin/bash
 # -------------------------------------------------------------------
 # Git Flow Enhanced (gf)
-# Version: 1.3.0
+# Version: 1.4.0
 # Author: Christian Benítez
 # GitHub: https://github.com/chrisatdev
 # Description: Advanced Git workflow automation tool
@@ -179,6 +179,55 @@ init_changelog() {
     fi
 }
 
+# Function to get base branch from config
+get_base_branch() {
+    local config_file=".git/gf-config"
+    if [ -f "$config_file" ]; then
+        local base_branch=$(grep "^BASE_BRANCH=" "$config_file" | cut -d'=' -f2)
+        if [ -n "$base_branch" ]; then
+            echo "$base_branch"
+            return
+        fi
+    fi
+    echo "main"
+}
+
+# Function to set base branch in config
+set_base_branch() {
+    local branch="$1"
+    local config_file=".git/gf-config"
+    
+    if [ -z "$branch" ]; then
+        echo -e "${RED}❌ Branch name is required${NC}"
+        return 1
+    fi
+    
+    # Create or update config file
+    echo "BASE_BRANCH=$branch" > "$config_file"
+    echo -e "${GREEN}✅ Base branch set to ${CYAN}$branch${NC}"
+}
+
+# Function to switch branches
+switch_branch() {
+    local branch="$1"
+    
+    if [ -z "$branch" ]; then
+        echo -e "${RED}❌ Branch name is required${NC}"
+        echo -e "${YELLOW}Usage: gf -w branch-name${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}🔄 Switching to branch ${CYAN}$branch${GREEN}...${NC}"
+    git checkout "$branch"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Switched to ${CYAN}$branch${NC}"
+    else
+        echo -e "${RED}❌ Error switching to branch${NC}"
+        exit 1
+    fi
+}
+
 # Function to get GitLab username
 get_gitlab_user() {
     # Try to get from git config first
@@ -206,7 +255,7 @@ get_gitlab_user() {
 # Function to show help
 show_help() {
     echo -e "${GREEN}🚀 Git Flow Enhanced (gf)${NC}"
-    echo -e "${GREEN} Version: 1.3.0 - by Christian Benítez${NC}"
+    echo -e "${GREEN} Version: 1.4.0 - by Christian Benítez${NC}"
     echo -e "${GREEN} GitHub: https://github.com/chrisatdev${NC}"
     echo -e "${GREEN}   Usage:${NC}"
     echo -e "  ${CYAN}gf -i${NC}                        ${GREEN}🆕${NC} Initialize new Git repository"
@@ -215,20 +264,24 @@ show_help() {
     echo -e "  ${CYAN}gf -s -h [name]${NC}              ${RED}🐛${NC} Create hotfix branch (hotfix/name)"
     echo -e "  ${CYAN}gf -s -b [name]${NC}              ${YELLOW}🚑${NC} Create bugfix branch (bugfix/name)"
     echo -e "  ${CYAN}gf -s -r [name]${NC}              ${BLUE}🚀${NC} Create release branch (release/name)"
+    echo -e "  ${CYAN}gf -w [branch]${NC}               ${GREEN}🔀${NC} Switch to specified branch"
+    echo -e "  ${CYAN}gf -c [branch]${NC}               ${GREEN}⚙️${NC} Configure base branch (default: main)"
     echo -e "  ${CYAN}gf -a [files]${NC}                ${GREEN}📦${NC} Stage changes (stage all if no files specified)"
     echo -e "  ${CYAN}gf -p \"[msg]\"${NC}                ${GREEN}💾${NC} Commit (with message) and push, then open MR/PR"
-    echo -e "  ${CYAN}gf -m${NC}                        ${GREEN}🔀${NC} Merge main into current branch (handle conflicts)"
+    echo -e "  ${CYAN}gf -m${NC}                        ${GREEN}🔀${NC} Merge base branch into current branch (handle conflicts)"
     echo -e "  ${CYAN}gf -f${NC}                        ${RED}🗑️${NC} Finish and delete current branch (local & remote)"
     echo -e "  ${CYAN}gf -r [source] [target]${NC}      ${PURPLE}🔄${NC} Create MR from source to target branch (GitLab)"
     echo -e "  ${CYAN}gf -h${NC}                        ${BLUE}ℹ️${NC} Show this help"
     echo -e "\n${PURPLE}📚 Examples:${NC}"
     echo -e "  ${CYAN}gf -i${NC}"
+    echo -e "  ${CYAN}gf -c test${NC}                   ${GREEN}# Set test as base branch${NC}"
     echo -e "  ${CYAN}gf -s -f ticket-1000${NC}"
+    echo -e "  ${CYAN}gf -w feature/ticket-1000${NC}"
     echo -e "  ${CYAN}gf -a${NC}"
     echo -e "  ${CYAN}gf -p \"feat: add new API endpoint\"${NC}"
     echo -e "  ${CYAN}gf -m${NC}"
     echo -e "  ${CYAN}gf -f${NC}"
-    echo -e "  ${CYAN}gf -r main dev${NC}"
+    echo -e "  ${CYAN}gf -r test dev${NC}"
 }
 
 # Function to count and categorize file changes
@@ -478,7 +531,7 @@ init_repo() {
 
 # Create new branch
 start_branch() {
-    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    local base_branch=$(get_base_branch)
     local branch_type=""
     local branch_name=""
     local emoji=""
@@ -516,19 +569,19 @@ start_branch() {
 
     full_branch_name="$branch_type/$branch_name"
 
-    echo -e "${GREEN}🔄 Updating $current_branch branch...${NC}"
-    git checkout $current_branch 2>/dev/null || git checkout -b $current_branch
-    git pull origin $current_branch
+    echo -e "${GREEN}🔄 Updating ${CYAN}$base_branch${GREEN} branch...${NC}"
+    git checkout $base_branch 2>/dev/null || git checkout -b $base_branch
+    git pull origin $base_branch
 
     if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}⚠️ Couldn't pull from origin/$current_branch. Using local $current_branch branch${NC}"
+        echo -e "${YELLOW}⚠️ Couldn't pull from origin/$base_branch. Using local $base_branch branch${NC}"
     fi
 
-    echo -e "${GREEN}🌱 Creating branch: ${CYAN}$full_branch_name ${emoji}${NC}"
+    echo -e "${GREEN}🌱 Creating branch: ${CYAN}$full_branch_name ${emoji} ${GREEN}from ${CYAN}$base_branch${NC}"
     git checkout -b "$full_branch_name"
 
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✅ Branch ${CYAN}$full_branch_name ${GREEN}created${NC}"
+        echo -e "${GREEN}✅ Branch ${CYAN}$full_branch_name ${GREEN}created from ${CYAN}$base_branch${NC}"
     else
         echo -e "${RED}❌ Error creating branch${NC}"
         exit 1
@@ -556,13 +609,14 @@ add_changes() {
 # Commit and push
 commit_and_push() {
     local commit_message="$1"
+    local base_branch=$(get_base_branch)
 
-    # Get current branch early for main branch check
+    # Get current branch early for base branch check
     current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-    # Skip MR creation for main branch
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${YELLOW}⚠️  No MR will be created for main branch${NC}"
+    # Skip MR creation for base branch
+    if [ "$current_branch" = "$base_branch" ]; then
+        echo -e "${YELLOW}⚠️  No MR will be created for ${CYAN}$base_branch${YELLOW} branch${NC}"
 
         if [ -z "$commit_message" ]; then
             commit_message=$(generate_semantic_message)
@@ -581,9 +635,9 @@ commit_and_push() {
         local md_body=$(echo "$commit_message" | tail -n +3 | sed 's/^\*\*/*/g')
         git commit -m "$(echo "$commit_message" | head -n1)" -m "$md_body"
 
-        echo -e "${GREEN}📤 Pushing to ${CYAN}main${GREEN}...${NC}"
-        git push origin main
-        return # Exit early for main branch
+        echo -e "${GREEN}📤 Pushing to ${CYAN}$base_branch${GREEN}...${NC}"
+        git push origin $base_branch
+        return # Exit early for base branch
     fi
 
     if [ -z "$commit_message" ]; then
@@ -629,16 +683,16 @@ commit_and_push() {
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Push successful${NC}"
-        # Open MR/PR URL
+        # Open MR/PR URL with base branch as target
         remote_url=$(git remote get-url origin | sed 's/\.git$//' | sed 's/git@\(.*\):/\1\//' | sed 's/https:\/\///')
         if [[ $remote_url == *"gitlab"* ]]; then
-            mr_url="https://${remote_url}/-/merge_requests/new?merge_request[source_branch]=${current_branch}"
-            echo -e "${CYAN}🔗 Opening Merge Request...${NC}"
+            mr_url="https://${remote_url}/-/merge_requests/new?merge_request[source_branch]=${current_branch}&merge_request[target_branch]=${base_branch}"
+            echo -e "${CYAN}🔗 Opening Merge Request to ${CYAN}$base_branch${CYAN}...${NC}"
             xdg-open "$mr_url" 2>/dev/null || open "$mr_url" 2>/dev/null || start "$mr_url" 2>/dev/null
             exit 0
         elif [[ $remote_url == *"github"* ]]; then
-            pr_url="https://${remote_url}/compare/${current_branch}?expand=1"
-            echo -e "${CYAN}🔗 Opening Pull Request...${NC}"
+            pr_url="https://${remote_url}/compare/${base_branch}...${current_branch}?expand=1"
+            echo -e "${CYAN}🔗 Opening Pull Request to ${CYAN}$base_branch${CYAN}...${NC}"
             xdg-open "$pr_url" 2>/dev/null || open "$pr_url" 2>/dev/null || start "$pr_url" 2>/dev/null
             exit 0
         fi
@@ -649,12 +703,13 @@ commit_and_push() {
     fi
 }
 
-# Merge main into current branch
+# Merge base branch into current branch
 merge_main() {
+    local base_branch=$(get_base_branch)
     current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${RED}❌ Cannot merge main into itself${NC}"
+    if [ "$current_branch" = "$base_branch" ]; then
+        echo -e "${RED}❌ Cannot merge ${CYAN}$base_branch${RED} into itself${NC}"
         exit 1
     fi
 
@@ -670,11 +725,11 @@ merge_main() {
         fi
     fi
 
-    echo -e "${GREEN}🔄 Updating $current_branch branch...${NC}"
-    git fetch origin main
+    echo -e "${GREEN}🔄 Fetching ${CYAN}$base_branch${GREEN} branch...${NC}"
+    git fetch origin $base_branch
 
-    echo -e "${GREEN}🔀 Merging $current_branch into ${CYAN}$current_branch${GREEN}...${NC}"
-    git merge --no-ff --no-commit origin/main
+    echo -e "${GREEN}🔀 Merging ${CYAN}$base_branch${GREEN} into ${CYAN}$current_branch${GREEN}...${NC}"
+    git merge --no-ff --no-commit origin/$base_branch
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Merge successful${NC}"
@@ -688,18 +743,19 @@ merge_main() {
 
 # Finish and delete branch
 finish_branch() {
+    local base_branch=$(get_base_branch)
     current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-    if [ "$current_branch" = "main" ]; then
-        echo -e "${RED}❌ Cannot delete main branch${NC}"
+    if [ "$current_branch" = "$base_branch" ]; then
+        echo -e "${RED}❌ Cannot delete ${CYAN}$base_branch${RED} branch${NC}"
         exit 1
     fi
 
-    echo -e "${GREEN}🔄 Switching to main branch...${NC}"
-    git checkout main
+    echo -e "${GREEN}🔄 Switching to ${CYAN}$base_branch${GREEN} branch...${NC}"
+    git checkout $base_branch
 
-    echo -e "${GREEN}🔥 Pulling latest changes...${NC}"
-    git pull origin main
+    echo -e "${GREEN}🔥 Pulling latest changes from ${CYAN}$base_branch${GREEN}...${NC}"
+    git pull origin $base_branch
 
     echo -e "${GREEN}🗑️ Deleting local branch ${CYAN}$current_branch${GREEN}...${NC}"
     git branch -D "$current_branch"
@@ -750,7 +806,7 @@ create_mr() {
 }
 
 # Main execution
-if [ "$1" != "-h" ]; then
+if [ "$1" != "-h" ] && [ "$1" != "-s" ]; then
     # Show archive status message only if there are files to process
     if [ -f "CHANGELOG.md" ] && is_changelog_from_previous_month; then
         echo -e "${BLUE}📅 Checking changelog rotation...${NC}"
@@ -775,6 +831,16 @@ case $1 in
         shift
         start_branch "$@"
     fi
+    exit 0
+    ;;
+-w)
+    shift
+    switch_branch "$@"
+    exit 0
+    ;;
+-c)
+    shift
+    set_base_branch "$@"
     exit 0
     ;;
 -a)
