@@ -137,3 +137,48 @@ func (r *Runner) StagedFiles() ([]string, error) {
 func (r *Runner) RemoteURL() (string, error) {
 	return r.Command("remote", "get-url", "origin")
 }
+
+// StagedFilesByStatus returns staged files grouped by status
+func (r *Runner) StagedFilesByStatus() (newFiles, modFiles, delFiles, renamedFiles []string, err error) {
+	// Get files with their status codes
+	output, err := r.Command("diff", "--cached", "--name-status")
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	if output == "" {
+		return []string{}, []string{}, []string{}, []string{}, nil
+	}
+
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, "\t")
+		if len(parts) < 2 {
+			continue
+		}
+
+		status := parts[0]
+		file := parts[1]
+
+		switch status {
+		case "A", "?":
+			newFiles = append(newFiles, file)
+		case "M":
+			modFiles = append(modFiles, file)
+		case "D":
+			delFiles = append(delFiles, file)
+		case "R":
+			renamedFiles = append(renamedFiles, file)
+		default:
+			// Unknown status, treat as modified
+			modFiles = append(modFiles, file)
+		}
+	}
+
+	return newFiles, modFiles, delFiles, renamedFiles, nil
+}
+
+// GetStagedDiff returns the diff of staged changes
+func (r *Runner) GetStagedDiff() (string, error) {
+	return r.Command("diff", "--cached")
+}

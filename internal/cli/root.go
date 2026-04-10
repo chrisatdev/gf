@@ -32,7 +32,7 @@ var CLI struct {
 	Bugfix    string `short:"b" help:"Create bugfix branch (-b name)"`
 	Release   string `short:"r" help:"Create release branch (-r name)"`
 	Add       bool   `short:"a" help:"Stage changes (-a or -a file1 file2)"`
-	Commit    string `short:"p" help:"Commit and push (-p or -p \"message\")"`
+	Commit    bool   `short:"p" help:"Commit and push (-p or -p \"message\")"`
 	Merge     bool   `short:"m" help:"Merge main into current branch"`
 	Finish    bool   `name:"finish" short:"F" help:"Finish and delete current branch (-f shortcut)"`
 	MR        bool   `name:"mr" short:"M" help:"Create MR"`
@@ -110,8 +110,11 @@ func Execute() error {
 	}
 
 	// Commit & Push
-	if CLI.Commit != "" || flagProvided("-p") {
-		msg := CLI.Commit
+	if CLI.Commit || flagProvided("-p") {
+		msg := ""
+		if len(CLI.Args) > 0 {
+			msg = CLI.Args[0]
+		}
 		return runCommit(runner, msg)
 	}
 
@@ -413,7 +416,6 @@ func runCommit(runner *git.Runner, message string) error {
 	yellow := "\033[33m"
 	red := "\033[31m"
 	cyan := "\033[36m"
-	purple := "\033[35m"
 	nc := "\033[0m"
 
 	currentBranch, _ := runner.CurrentBranch()
@@ -433,11 +435,18 @@ func runCommit(runner *git.Runner, message string) error {
 
 	// Generate or use provided message
 	if message == "" {
+		// Auto-generate message
 		gen := commit.NewGenerator()
-		diff, _ := runner.Command("diff", "--cached")
-		info := gen.Generate(staged, diff)
+
+		// Get files by status
+		newFiles, modFiles, delFiles, renamedFiles, _ := runner.StagedFilesByStatus()
+		diff, _ := runner.GetStagedDiff()
+
+		info := gen.GenerateFromFileStatus(newFiles, modFiles, delFiles, renamedFiles, diff)
 		message = gen.FormatMessage(info)
-		fmt.Printf("%s📝 Auto-generated commit message:\n%s%s %s%s\n\n", yellow, purple, message, green, nc)
+
+		fmt.Printf("%s📝 Auto-generated commit message:%s\n\n%s\n", yellow, nc, message)
+		fmt.Println()
 	} else {
 		// Add gitmoji if not present
 		if !containsGitmoji(message) {
@@ -454,7 +463,7 @@ func runCommit(runner *git.Runner, message string) error {
 	fmt.Printf("%s💾 Commit created%s\n", green, nc)
 
 	// Push
-	fmt.Printf("%s📤 Pushing to %s...%s\n", green, cyan, currentBranch, nc)
+	fmt.Printf("%s📤 Pushing to %s%s%s\n", green, cyan, currentBranch, nc)
 	if err := runner.Push(currentBranch, true); err != nil {
 		fmt.Printf("%s❌ Push failed: %v%s\n", red, err, nc)
 		fmt.Printf("%s⚠️  If conflicts exist, run: %sgf -m%s\n", yellow, cyan, nc)
@@ -584,7 +593,7 @@ func runMerge(runner *git.Runner) error {
 	fmt.Printf("%s🔄 Fetching origin/%s...%s\n", green, mainBranch, nc)
 	runner.Fetch("origin")
 
-	fmt.Printf("%s🔀 Merging origin/%s into %s...%s\n", green, mainBranch, cyan, currentBranch, nc)
+	fmt.Printf("%s🔀 Merging origin/%s into %s%s%s\n", green, mainBranch, cyan, currentBranch, nc)
 
 	if err := runner.Merge("origin/"+mainBranch, false); err != nil {
 		// Check for conflicts
@@ -621,13 +630,13 @@ func runFinish(runner *git.Runner) error {
 	fmt.Printf("%s📥 Pulling latest %s...%s\n", green, mainBranch, nc)
 	runner.Pull()
 
-	fmt.Printf("%s🗑️  Deleting local branch %s...%s\n", green, cyan, currentBranch, nc)
+	fmt.Printf("%s🗑️  Deleting local branch %s%s%s\n", green, cyan, currentBranch, nc)
 	runner.DeleteBranch(currentBranch, true)
 
 	fmt.Printf("%s♻️  Deleting remote branch...%s\n", green, nc)
 	runner.DeleteRemoteBranch(currentBranch)
 
-	fmt.Printf("%s✅ Branch %s %scleaned up%s\n", green, cyan, currentBranch, green, nc)
+	fmt.Printf("%s✅ Branch %s %scleaned up%s\n", green, cyan, currentBranch, nc)
 	return nil
 }
 
