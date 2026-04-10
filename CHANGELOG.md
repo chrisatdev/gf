@@ -8,3 +8,4 @@
 
 ### Changed
 - docs: update documentation (20 files)
+- fix: test format
