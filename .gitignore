@@ -1,0 +1,22 @@
+# Binaries
+gf
+gf.exe
+*.exe
+
+# Go
+vendor/
+*.test
+coverage.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.bak
