@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -18,10 +20,14 @@ import (
 // Version info
 const Version = "2.0.0"
 
+// UpdateURL is the GitHub repo for updates
+const UpdateURL = "https://github.com/chrisatdev/gf"
+
 // CLI represents the main application structure with git-style flags
 var CLI struct {
 	// Version flag
 	Version bool `short:"v" help:"Show version information"`
+	Update  bool `long:"update" help:"Update gf to latest version"`
 
 	// Main flags
 	Init      bool   `short:"i" help:"Initialize new Git repository"`
@@ -36,10 +42,18 @@ var CLI struct {
 	Merge     bool   `short:"m" help:"Merge main into current branch"`
 	Finish    bool   `name:"finish" short:"F" help:"Finish and delete current branch (-f shortcut)"`
 	MR        bool   `name:"mr" short:"M" help:"Create MR"`
+	Tag       bool   `short:"t" help:"Create a tag (-t <version> [-m <message>] [-p])"`
 	Help      bool   `short:"?" help:"Show this help"`
 
 	// Positional args (for add and mr)
 	Args []string `arg optional name:"args" help:"Files to stage or MR source/target"`
+}
+
+// TagCmd for tag operations
+type TagCmd struct {
+	Version string `arg optional name:"version" help:"Tag version (e.g., v1.0.0)"`
+	Message string `short:"m" help:"Tag message"`
+	Push    bool   `short:"p" help:"Push tag to remote after creation"`
 }
 
 // gfDir is the hidden directory for gf config
@@ -61,6 +75,11 @@ func Execute() error {
 	if CLI.Version {
 		fmt.Printf("gf version %s\n", Version)
 		return nil
+	}
+
+	// Update flag
+	if CLI.Update {
+		return runUpdate()
 	}
 
 	// Help flag
@@ -140,6 +159,11 @@ func Execute() error {
 		return runMR(runner, source, target)
 	}
 
+	// Tag
+	if CLI.Tag {
+		return runTag()
+	}
+
 	// No flags provided, show help
 	showHelp()
 	return nil
@@ -180,6 +204,8 @@ func showHelp() {
 	fmt.Printf("  %sgf -m%s                        %s🔀%s Merge main into current branch (handle conflicts)\n", cyan, nc, green, nc)
 	fmt.Printf("  %sgf -F%s                        %s🗑️%s Finish and delete current branch (local & remote)\n", cyan, nc, red, nc)
 	fmt.Printf("  %sgf -M [source] [target]%s      %s🔄%s Create MR from source to target branch (GitLab)\n", cyan, nc, purple, nc)
+	fmt.Printf("  %sgf -t <version>%s             %s🏷️%s Create tag (e.g., gf -t v1.0.0)\n", cyan, nc, green, nc)
+	fmt.Printf("  %sgf --update%s                  %s⬆️%s Update to latest version\n", cyan, nc, green, nc)
 	fmt.Printf("  %sgf -h%s                        %sℹ️%s Show this help\n", cyan, nc, blue, nc)
 
 	fmt.Printf("\n%s📚 Examples:%s\n", purple, nc)
@@ -192,6 +218,267 @@ func showHelp() {
 	fmt.Printf("  %sgf -m%s\n", cyan, nc)
 	fmt.Printf("  %sgf -F%s\n", cyan, nc)
 	fmt.Printf("  %sgf -M main dev%s\n", cyan, nc)
+	fmt.Printf("  %sgf -t v1.0.0 -p%s\n", cyan, nc)
+	fmt.Printf("  %sgf --update%s\n", cyan, nc)
+}
+
+// runTag creates a git tag
+func runTag() error {
+	green := "\033[32m"
+	red := "\033[31m"
+	cyan := "\033[36m"
+	yellow := "\033[33m"
+	nc := "\033[0m"
+
+	runner := git.NewRunner()
+
+	// Parse tag arguments manually
+	args := os.Args
+	var tagVersion, tagMessage string
+	var pushTag bool
+
+	for i, arg := range args {
+		if arg == "-t" || arg == "--tag" {
+			if i+1 < len(args) {
+				tagVersion = args[i+1]
+				if strings.HasPrefix(tagVersion, "-") {
+					tagVersion = ""
+				}
+			}
+		}
+		if arg == "-m" || arg == "--message" {
+			if i+1 < len(args) {
+				tagMessage = args[i+1]
+			}
+		}
+		if arg == "-p" || arg == "--push" {
+			pushTag = true
+		}
+	}
+
+	if tagVersion == "" {
+		return fmt.Errorf("%s❌ Tag version required. Usage: gf -t v1.0.0 [-m \"message\"] [-p]%s\n", red, nc)
+	}
+
+	// Ensure version starts with 'v'
+	if !strings.HasPrefix(tagVersion, "v") {
+		tagVersion = "v" + tagVersion
+	}
+
+	// Get current branch
+	currentBranch, _ := runner.CurrentBranch()
+	mainBranch := GetMainBranch()
+
+	// Only allow tags from main branch
+	if currentBranch != mainBranch {
+		fmt.Printf("%s⚠️  You are on branch '%s'. Tags should be created from '%s'.%s\n", yellow, currentBranch, mainBranch, nc)
+		fmt.Printf("%s💡 Switch to %s and pull latest first.%s\n", cyan, mainBranch, nc)
+	}
+
+	// Get tag message
+	if tagMessage == "" {
+		tagMessage = fmt.Sprintf("Release %s", tagVersion)
+	}
+
+	// Create tag
+	fmt.Printf("%s🏷️ Creating tag: %s%s\n", cyan, tagVersion, nc)
+
+	// Create annotated tag
+	cmd := exec.Command("git", "tag", "-a", tagVersion, "-m", tagMessage)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s❌ Failed to create tag: %v%s\n", red, err, nc)
+	}
+
+	fmt.Printf("%s✅ Tag %s created%s\n", green, tagVersion, nc)
+
+	// Push tag if requested
+	if pushTag {
+		fmt.Printf("%s📤 Pushing tag to origin...%s\n", cyan, nc)
+		cmd = exec.Command("git", "push", "origin", tagVersion)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s❌ Failed to push tag: %v%s\n", red, err, nc)
+		}
+		fmt.Printf("%s✅ Tag %s pushed to origin%s\n", green, tagVersion, nc)
+		fmt.Printf("%s🔗 %s/releases/tag/%s%s\n", cyan, UpdateURL, tagVersion, nc)
+	}
+
+	return nil
+}
+
+// runUpdate updates gf to the latest version
+func runUpdate() error {
+	green := "\033[32m"
+	yellow := "\033[33m"
+	red := "\033[31m"
+	cyan := "\033[36m"
+	nc := "\033[0m"
+
+	fmt.Printf("%s⬆️ Checking for updates...%s\n", cyan, nc)
+
+	// Get current binary path
+	currentPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("%s❌ Could not find current executable: %v%s\n", red, err, nc)
+	}
+
+	// Get OS and architecture
+	osName := getOS()
+	arch := getArch()
+	extension := getExtension(osName)
+
+	// Get latest release tag
+	latestTag, err := getLatestTag()
+	if err != nil {
+		return fmt.Errorf("%s❌ Could not check for updates: %v%s\n", red, err, nc)
+	}
+
+	// Compare versions
+	if latestTag == Version {
+		fmt.Printf("%s✅ You're running the latest version: %s%s\n", green, Version, nc)
+		return nil
+	}
+
+	fmt.Printf("%s🔔 New version available: %s%s\n", yellow, latestTag, nc)
+	fmt.Printf("%s📦 Current version: %s%s\n", cyan, Version, nc)
+
+	// Download URL
+	downloadName := fmt.Sprintf("gf_%s_%s_%s%s", latestTag, osName, arch, extension)
+	downloadURL := fmt.Sprintf("%s/releases/download/%s/%s", UpdateURL, latestTag, downloadName)
+
+	fmt.Printf("%s⬇️ Downloading from: %s%s\n", cyan, downloadURL, nc)
+
+	// Create temp file
+	tempDir := os.TempDir()
+	tempFile := filepath.Join(tempDir, "gf_new"+extension)
+
+	// Download
+	if err := downloadFile(downloadURL, tempFile); err != nil {
+		return fmt.Errorf("%s❌ Download failed: %v%s\n", red, err, nc)
+	}
+
+	// Make executable
+	if err := os.Chmod(tempFile, 0755); err != nil {
+		return fmt.Errorf("%s❌ Could not make executable: %v%s\n", red, err, nc)
+	}
+
+	// Try to replace binary
+	if err := os.Rename(tempFile, currentPath); err != nil {
+		// Binary is in use or no permissions, provide instructions
+		fmt.Printf("%s⚠️  Could not replace running binary (in use or no permissions)%s\n", yellow, nc)
+		fmt.Printf("%s📦 New version downloaded to: %s%s\n", cyan, tempFile, nc)
+		fmt.Println()
+		fmt.Printf("%s💡 To complete the update, run:%s\n", green, nc)
+		fmt.Printf("   mv %s %s%s\n", tempFile, currentPath, nc)
+		fmt.Println()
+		fmt.Printf("%s   Or (if above fails):%s\n", cyan, nc)
+		fmt.Printf("   sudo mv %s %s%s\n", tempFile, currentPath, nc)
+		return nil
+	}
+
+	fmt.Printf("%s✅ Successfully updated to version %s%s\n", green, latestTag, nc)
+	fmt.Printf("%s💡 Restart gf to use the new version%s\n", cyan, nc)
+
+	return nil
+}
+
+func getOS() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "darwin"
+	case "windows":
+		return "windows"
+	default:
+		return "linux"
+	}
+}
+
+func getArch() string {
+	switch runtime.GOARCH {
+	case "arm64":
+		return "arm64"
+	case "arm":
+		return "arm"
+	default:
+		return "amd64"
+	}
+}
+
+func getExtension(osName string) string {
+	if osName == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+func getLatestTag() (string, error) {
+	// Try GitHub API first
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", UpdateURL)
+	cmd := exec.Command("curl", "-s", "-m", "10", url)
+	output, err := cmd.Output()
+	if err == nil && len(output) > 10 {
+		var result struct {
+			TagName string `json:"tag_name"`
+		}
+		if err := json.Unmarshal(output, &result); err == nil && result.TagName != "" {
+			return strings.TrimPrefix(result.TagName, "v"), nil
+		}
+	}
+
+	// Fallback: get from git ls-remote
+	cmd = exec.Command("git", "ls-remote", "--tags", "--refs", UpdateURL)
+	output, err = cmd.Output()
+	if err != nil {
+		return Version, fmt.Errorf("could not connect to GitHub")
+	}
+
+	lines := strings.Split(string(output), "\n")
+	var latestTag string
+	for _, line := range lines {
+		if strings.Contains(line, "refs/tags/") {
+			parts := strings.Split(line, "refs/tags/")
+			if len(parts) > 1 {
+				tag := strings.Split(parts[1], "^")[0]
+				if !strings.Contains(tag, "^{}") && tag != "" && strings.HasPrefix(tag, "v") {
+					latestTag = tag
+				}
+			}
+		}
+	}
+	if latestTag == "" {
+		return Version, fmt.Errorf("no version tags found")
+	}
+	return strings.TrimPrefix(latestTag, "v"), nil
+}
+
+func downloadFile(url, dest string) error {
+	cmd := exec.Command("curl", "-sL", "-o", dest, url)
+	return cmd.Run()
+}
+
+func copyFile(src, dst string) error {
+	from, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer from.Close()
+
+	to, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer to.Close()
+
+	_, err = from.Stat()
+	if err != nil {
+		return err
+	}
+
+	_, err = to.Stat()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // runInit initializes a new git repository
