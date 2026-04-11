@@ -1,10 +1,10 @@
 # Git Flow Enhanced (gf) 🚀
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Version](https://img.shields.io/badge/Version-1.3.0-blue)
+![Version](https://img.shields.io/badge/Version-1.4.0-blue)
 ![Bash](https://img.shields.io/badge/Bash-5.0%2B-brightgreen)
 
-A powerful Git workflow automation tool with semantic commits, Gitmoji support, automatic changelog management, and advanced features.
+A powerful Git workflow automation tool with semantic commits, Gitmoji support, automatic changelog management, configurable base branch, and advanced features.
 
 **Author**: [Christian Benítez](https://github.com/chrisatdev)
 
@@ -16,6 +16,11 @@ A powerful Git workflow automation tool with semantic commits, Gitmoji support, 
   - Create hotfix branches: `gf -s -h hotfix-name`
   - Create bugfix branches: `gf -s -b bugfix-name`
   - Create release branches: `gf -s -r release-name`
+  - Switch branches: `gf -w branch-name`
+- ⚙️ **Configurable Base Branch**: `gf -c branch-name`
+  - Set any branch as base (main, test, develop, etc.)
+  - All operations use configured base branch
+  - MR/PR automatically target the configured base branch
 - 💾 **Smart Commits**:
   - Auto-generated semantic commit messages with file count
   - Gitmoji support
@@ -23,14 +28,15 @@ A powerful Git workflow automation tool with semantic commits, Gitmoji support, 
   - English commit messages with GitLab user attribution
 - 📦 **Staging Changes**: `gf -a` or `gf -a file1 file2`
 - 📤 **Push & Create MR/PR**: `gf -p "commit message"`
-- 🔀 **Merge Handling**: `gf -m`
-- 🗑️ **Branch Cleanup**: `gf -f`
+- 🔀 **Merge Handling**: `gf -m` (merges base branch into current)
+- 🗑️ **Branch Cleanup**: `gf -f` (returns to base branch)
 - 🔄 **Cross-branch MR Creation** (GitLab): `gf -r source target`
 - 📜 **Advanced CHANGELOG.md Management**:
   - Automatic generation and updates
   - Monthly rotation and archiving
   - Auto-cleanup of old archives (6+ months)
   - Enhanced format with user attribution
+  - No changelog generation on `gf -s` (status only)
 
 ## 🚀 Installation
 
@@ -87,7 +93,7 @@ source ~/.zshrc  # or source ~/.bash_profile
 gf -h
 ```
 
-You should see the help message with version 1.3.0.
+You should see the help message with version 1.4.0.
 
 ## 📚 Basic Usage
 
@@ -97,10 +103,29 @@ You should see the help message with version 1.3.0.
 gf -i
 ```
 
+### Configure base branch
+
+```bash
+# Set test as base branch (default is main)
+gf -c test
+
+# Set develop as base branch
+gf -c develop
+
+# Set back to main
+gf -c main
+```
+
+This configuration is saved in `.git/gf-config` and affects all operations:
+- New branches are created from the base branch
+- MR/PR target the base branch
+- Merge operations pull from the base branch
+- Finish command returns to the base branch
+
 ### Create different types of branches
 
 ```bash
-# Feature branch
+# Feature branch (created from configured base branch)
 gf -s -f awesome-feature
 
 # Hotfix branch
@@ -111,6 +136,16 @@ gf -s -b login-issue
 
 # Release branch
 gf -s -r v2.1.0
+```
+
+### Switch branches
+
+```bash
+# Switch to any branch
+gf -w feature/awesome-feature
+
+# Switch to base branch
+gf -w main  # or test, develop, etc.
 ```
 
 ### Stage changes
@@ -151,21 +186,21 @@ Changes: 2 new, 1 modified
 ### Merge and cleanup
 
 ```bash
-# Merge main into current branch
+# Merge base branch into current branch
 gf -m
 
-# Delete current branch and return to main
+# Delete current branch and return to base branch
 gf -f
 ```
 
 ### Create Merge Requests (GitLab)
 
 ```bash
-# Create MR from current branch to main
-gf -p "feat: new feature"  # Automatically opens MR
+# Create MR from current branch to base branch (configured with gf -c)
+gf -p "feat: new feature"  # Automatically opens MR to base branch
 
 # Create MR between specific branches
-gf -r feature/payment main
+gf -r feature/payment test  # Create MR from feature/payment to test
 ```
 
 ## ✨ Gitmoji Support
@@ -239,19 +274,19 @@ project/
 ### Feature Development Workflow
 
 ```bash
-# 1. Create feature branch
+# 1. Create feature branch (from base branch)
 gf -s -f user-profile
 
 # 2. Make changes, then stage
 gf -a
 
-# 3. Commit and push (opens MR automatically)
+# 3. Commit and push (opens MR automatically to base branch)
 gf -p
 
-# 4. Merge main updates if needed
+# 4. Merge base branch updates if needed
 gf -m
 
-# 5. When done, cleanup branch
+# 5. When done, cleanup branch (returns to base branch)
 gf -f
 ```
 
@@ -267,6 +302,30 @@ gf -p "fix: resolve security vulnerability in auth"
 
 # 3. Cleanup
 gf -f
+```
+
+### Working with Multiple Base Branches
+
+```bash
+# Scenario: Working on a project with main and test branches
+
+# 1. Set test as base branch
+gf -c test
+
+# 2. Create feature from test
+gf -s -f new-feature
+
+# 3. Make changes and push (MR will target test, not main)
+gf -a
+gf -p "feat: add new feature"
+
+# 4. Switch back to main for hotfix
+gf -c main
+gf -s -h critical-fix
+
+# 5. Push hotfix (MR will target main)
+gf -a
+gf -p "fix: critical bug"
 ```
 
 ## 🛠️ Requirements
@@ -336,10 +395,30 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 
 ## 🔄 Version History
 
+- **v1.4.0**: Configurable base branch, branch switching command, no changelog on status
 - **v1.3.0**: Monthly changelog rotation, enhanced commit messages, auto-cleanup
 - **v1.2.0**: Improved changelog format, GitLab user attribution
 - **v1.1.2**: Enhanced semantic commits and Gitmoji support
 - **v1.0.0**: Initial release with basic Git workflow automation
+
+## 🆕 What's New in v1.4.0
+
+### Configurable Base Branch
+- Use `gf -c branch-name` to set any branch as your base (main, test, develop, etc.)
+- All operations now respect the configured base branch:
+  - New branches are created from base branch
+  - MR/PR automatically target base branch
+  - Merge operations pull from base branch
+  - Finish command returns to base branch
+- Configuration persists in `.git/gf-config`
+
+### Branch Switching
+- New command `gf -w branch-name` for easy branch switching
+- Simpler alternative to `git switch` or `git checkout`
+
+### Improved Status Command
+- `gf -s` no longer triggers changelog generation
+- Faster status checks without unnecessary file operations
 
 ---
 
