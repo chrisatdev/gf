@@ -42,10 +42,19 @@ var CLI struct {
 	Merge     bool   `short:"m" help:"Merge main into current branch"`
 	Finish    bool   `name:"finish" short:"F" help:"Finish and delete current branch (-f shortcut)"`
 	MR        bool   `name:"mr" short:"M" help:"Create MR"`
+	Tag       bool   `short:"t" help:"Create a tag (-t <version> [-m <message>] [-p])"`
+	Switch    string `short:"w" help:"Switch to a branch (-w name)"`
 	Help      bool   `short:"?" help:"Show this help"`
 
 	// Positional args (for add and mr)
 	Args []string `arg optional name:"args" help:"Files to stage or MR source/target"`
+}
+
+// TagCmd for tag operations
+type TagCmd struct {
+	Version string `arg optional name:"version" help:"Tag version (e.g., v1.0.0)"`
+	Message string `short:"m" help:"Tag message"`
+	Push    bool   `short:"p" help:"Push tag to remote after creation"`
 }
 
 // gfDir is the hidden directory for gf config
@@ -54,23 +63,7 @@ const gfDir = ".gf"
 // mainBranchFile stores the main branch name
 const mainBranchFile = "main_branch"
 
-// checkIfTag checks if the command is a tag command and handles it manually
-// This is needed because Kong consumes -m for Merge, conflicting with tag message
-func checkIfTag() bool {
-	for _, arg := range os.Args[1:] {
-		if arg == "-t" || arg == "--tag" {
-			return true
-		}
-	}
-	return false
-}
-
 func Execute() error {
-	// Handle tag command manually BEFORE Kong parsing to avoid -m conflict
-	if checkIfTag() {
-		return runTagManual()
-	}
-
 	_ = kong.Parse(&CLI,
 		kong.Name("gf"),
 		kong.Description("Git Flow Enhanced - A powerful Git workflow automation tool"),
@@ -137,7 +130,7 @@ func Execute() error {
 	}
 
 	// Commit & Push
-	if CLI.Commit {
+	if CLI.Commit || flagProvided("-p") {
 		msg := ""
 		if len(CLI.Args) > 0 {
 			msg = CLI.Args[0]
@@ -167,9 +160,28 @@ func Execute() error {
 		return runMR(runner, source, target)
 	}
 
+	// Tag
+	if CLI.Tag {
+		return runTag()
+	}
+
+	// Switch to branch
+	if CLI.Switch != "" {
+		return runSwitch(runner, CLI.Switch)
+	}
+
 	// No flags provided, show help
 	showHelp()
 	return nil
+}
+
+func flagProvided(flag string) bool {
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, flag) && !strings.HasPrefix(arg, "--") {
+			return true
+		}
+	}
+	return false
 }
 
 func showHelp() {
@@ -217,8 +229,7 @@ func showHelp() {
 }
 
 // runTag creates a git tag
-// runTagManual manually parses tag command to avoid Kong's -m conflict with Merge
-func runTagManual() error {
+func runTag() error {
 	green := "\033[32m"
 	red := "\033[31m"
 	cyan := "\033[36m"
@@ -226,34 +237,27 @@ func runTagManual() error {
 	nc := "\033[0m"
 
 	runner := git.NewRunner()
+
+	// Parse tag arguments manually
 	args := os.Args
 	var tagVersion, tagMessage string
 	var pushTag bool
 
-	// Parse arguments manually
 	for i, arg := range args {
-		switch arg {
-		case "-t", "--tag":
-			// Next non-flag argument is version
-			for j := i + 1; j < len(args); j++ {
-				next := args[j]
-				if strings.HasPrefix(next, "-") {
-					break
+		if arg == "-t" || arg == "--tag" {
+			if i+1 < len(args) {
+				tagVersion = args[i+1]
+				if strings.HasPrefix(tagVersion, "-") {
+					tagVersion = ""
 				}
-				tagVersion = next
-				break
 			}
-		case "-m", "--message":
-			// Next non-flag argument is message
-			for j := i + 1; j < len(args); j++ {
-				next := args[j]
-				if strings.HasPrefix(next, "-") {
-					break
-				}
-				tagMessage = next
-				break
+		}
+		if arg == "-m" || arg == "--message" {
+			if i+1 < len(args) {
+				tagMessage = args[i+1]
 			}
-		case "-p", "--push":
+		}
+		if arg == "-p" || arg == "--push" {
 			pushTag = true
 		}
 	}
@@ -998,6 +1002,64 @@ func runMR(runner *git.Runner, source, target string) error {
 
 	// Return to original branch
 	runner.Checkout(currentBranch, false)
+
+	return nil
+}
+
+
+// runSwitch switches to a different branch
+func runSwitch(runner *git.Runner, branch string) error {
+	red := "\033[31m"
+	cyan := "\033[36m"
+	green := "\033[32m"
+	yellow := "\033[33m"
+	nc := "\033[0m"
+
+	if runner.HasChanges() {
+		fmt.Printf("%s⚠️  You have uncommitted changes. Stashing before switching...%s\n", yellow, nc)
+		runner.Command("stash", "push", "-u", "-m", "Auto-stash by gf before branch switch")
+	}
+
+	localBranches, _ := runner.LocalBranches()
+	branchExists := false
+	for _, b := range localBranches {
+		if b == branch {
+			branchExists = true
+			break
+		}
+	}
+
+	if !branchExists {
+		fmt.Printf("%s📥 Branch '%s' not found locally. Fetching from origin...%s\n", cyan, branch, nc)
+		cmd := exec.Command("git", "fetch", "origin", branch)
+		if err := cmd.Run(); err != nil {
+			if runner.HasChanges() {
+				fmt.Printf("%s💾 Restoring stashed changes...%s\n", cyan, nc)
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Branch '%s' not found%s\n", red, branch, nc)
+		}
+		if err := runner.Checkout(branch, false); err != nil {
+			if runner.HasChanges() {
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Failed to checkout branch '%s'%s\n", red, branch, nc)
+		}
+		fmt.Printf("%s✅ Switched to branch '%s'%s\n", green, branch, nc)
+	} else {
+		if err := runner.Checkout(branch, false); err != nil {
+			if runner.HasChanges() {
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Failed to switch to branch '%s'%s\n", red, branch, nc)
+		}
+		fmt.Printf("%s✅ Switched to branch '%s'%s\n", green, branch, nc)
+	}
+
+	behind, _ := runner.IsBehindRemote(branch)
+	if behind {
+		fmt.Printf("%s⚠️  Branch '%s' is behind origin. Run 'git pull'%s\n", yellow, branch, nc)
+	}
 
 	return nil
 }

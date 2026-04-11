@@ -182,3 +182,31 @@ func (r *Runner) StagedFilesByStatus() (newFiles, modFiles, delFiles, renamedFil
 func (r *Runner) GetStagedDiff() (string, error) {
 	return r.Command("diff", "--cached")
 }
+
+// LocalBranches returns a list of local branch names
+func (r *Runner) LocalBranches() ([]string, error) {
+	output, err := r.Command("branch", "--list", "--format=%(refname:short)")
+	if err != nil {
+		return nil, err
+	}
+	if output == "" {
+		return []string{}, nil
+	}
+	return strings.Split(output, "\n"), nil
+}
+
+// IsBehindRemote checks if the given branch is behind its remote
+func (r *Runner) IsBehindRemote(branch string) (bool, error) {
+	r.Fetch("origin")
+	output, err := r.Command("rev-list", "--left-right", "--count", fmt.Sprintf("origin/%s...%s", branch, branch))
+	if err != nil {
+		return false, err
+	}
+	parts := strings.Split(strings.TrimSpace(output), "\t")
+	if len(parts) != 2 {
+		return false, nil
+	}
+	var behind int
+	fmt.Sscanf(parts[0], "%d", &behind)
+	return behind > 0, nil
+}
