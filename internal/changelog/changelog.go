@@ -12,17 +12,19 @@ import (
 const changelogDir = "changelogs"
 const changelogFile = "CHANGELOG.md"
 
-// Init initializes the changelog directory and file
+// Init initializes the changelog directory (NOT the file)
 func Init() {
 	// Create changelogs directory if it doesn't exist
 	if err := os.MkdirAll(changelogDir, 0755); err != nil {
 		fmt.Printf("Warning: Could not create changelog directory: %v\n", err)
 	}
+}
 
-	// Create CHANGELOG.md if it doesn't exist
+// EnsureExists creates CHANGELOG.md only if it doesn't exist
+func EnsureExists() {
 	if _, err := os.Stat(changelogFile); os.IsNotExist(err) {
 		currentDate := time.Now().Format("January 2006")
-		content := fmt.Sprintf("# CHANGELOG\n\n## [Unreleased] - %s\n\n### Added\n\n- Initialized project\n\n", currentDate)
+		content := fmt.Sprintf("# CHANGELOG\n\n## [Unreleased] - %s\n\n### Added\n\n", currentDate)
 		if err := os.WriteFile(changelogFile, []byte(content), 0644); err != nil {
 			fmt.Printf("Warning: Could not create CHANGELOG.md: %v\n", err)
 		}

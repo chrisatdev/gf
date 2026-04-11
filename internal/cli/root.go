@@ -498,11 +498,8 @@ func runInit(runner *git.Runner) error {
 		return fmt.Errorf("%s❌ Error initializing repository: %v%s\n", red, err, nc)
 	}
 
-	// Initialize changelog
+	// Initialize changelog directory (but not the file itself)
 	changelog.Init()
-
-	// Stage changelog
-	runner.Add("CHANGELOG.md")
 
 	// Create initial commit
 	commitMsg := "🔧 chore: initial commit"
@@ -679,6 +676,8 @@ func getBranchEmoji(branchType string) string {
 func runAdd(runner *git.Runner, files []string) error {
 	green := "\033[32m"
 	red := "\033[31m"
+	cyan := "\033[36m"
+	yellow := "\033[33m"
 	nc := "\033[0m"
 
 	if len(files) == 0 {
@@ -694,6 +693,42 @@ func runAdd(runner *git.Runner, files []string) error {
 	}
 
 	fmt.Printf("%s✅ Changes staged%s\n", green, nc)
+
+	// Ask if user wants to update CHANGELOG
+	fmt.Printf("\n%s📝 Update CHANGELOG.md with these changes? (y/N): %s", cyan, nc)
+	var response string
+	fmt.Scanln(&response)
+
+	if strings.ToLower(response) == "y" {
+		// Ensure CHANGELOG exists
+		changelog.EnsureExists()
+
+		// Get staged files info
+		newFiles, modFiles, delFiles, _, _ := runner.StagedFilesByStatus()
+
+		// Generate commit message for changelog
+		var allFiles []string
+		allFiles = append(allFiles, newFiles...)
+		allFiles = append(allFiles, modFiles...)
+		allFiles = append(allFiles, delFiles...)
+
+		if len(allFiles) > 0 {
+			gen := commit.NewGenerator()
+			info := gen.Generate(allFiles, "")
+			shortMsg := fmt.Sprintf("%s %s: %s", info.Emoji, info.Type, info.Description)
+
+			commitType := info.Type
+			if err := changelog.AddEntry(commitType, shortMsg); err != nil {
+				fmt.Printf("%s⚠️  Warning: Could not update CHANGELOG: %v%s\n", yellow, err, nc)
+			} else {
+				fmt.Printf("%s✅ CHANGELOG.md updated%s\n", green, nc)
+
+				// Stage the changelog
+				runner.Add("CHANGELOG.md")
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -740,10 +775,6 @@ func runCommit(runner *git.Runner, message string) error {
 			message = addGitmoji(message)
 		}
 	}
-
-	// Update changelog
-	commitType := extractCommitType(message)
-	changelog.AddEntry(commitType, message)
 
 	// Commit
 	runner.Command("commit", "-m", message)
