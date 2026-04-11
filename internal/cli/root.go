@@ -42,18 +42,10 @@ var CLI struct {
 	Merge     bool   `short:"m" help:"Merge main into current branch"`
 	Finish    bool   `name:"finish" short:"F" help:"Finish and delete current branch (-f shortcut)"`
 	MR        bool   `name:"mr" short:"M" help:"Create MR"`
-	Tag       bool   `short:"t" help:"Create a tag (-t <version> [-m <message>] [-p])"`
 	Help      bool   `short:"?" help:"Show this help"`
 
 	// Positional args (for add and mr)
 	Args []string `arg optional name:"args" help:"Files to stage or MR source/target"`
-}
-
-// TagCmd for tag operations
-type TagCmd struct {
-	Version string `arg optional name:"version" help:"Tag version (e.g., v1.0.0)"`
-	Message string `short:"m" help:"Tag message"`
-	Push    bool   `short:"p" help:"Push tag to remote after creation"`
 }
 
 // gfDir is the hidden directory for gf config
@@ -62,7 +54,23 @@ const gfDir = ".gf"
 // mainBranchFile stores the main branch name
 const mainBranchFile = "main_branch"
 
+// checkIfTag checks if the command is a tag command and handles it manually
+// This is needed because Kong consumes -m for Merge, conflicting with tag message
+func checkIfTag() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "-t" || arg == "--tag" {
+			return true
+		}
+	}
+	return false
+}
+
 func Execute() error {
+	// Handle tag command manually BEFORE Kong parsing to avoid -m conflict
+	if checkIfTag() {
+		return runTagManual()
+	}
+
 	_ = kong.Parse(&CLI,
 		kong.Name("gf"),
 		kong.Description("Git Flow Enhanced - A powerful Git workflow automation tool"),
@@ -129,7 +137,7 @@ func Execute() error {
 	}
 
 	// Commit & Push
-	if CLI.Commit || flagProvided("-p") {
+	if CLI.Commit {
 		msg := ""
 		if len(CLI.Args) > 0 {
 			msg = CLI.Args[0]
@@ -159,23 +167,9 @@ func Execute() error {
 		return runMR(runner, source, target)
 	}
 
-	// Tag
-	if CLI.Tag {
-		return runTag()
-	}
-
 	// No flags provided, show help
 	showHelp()
 	return nil
-}
-
-func flagProvided(flag string) bool {
-	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, flag) && !strings.HasPrefix(arg, "--") {
-			return true
-		}
-	}
-	return false
 }
 
 func showHelp() {
@@ -223,7 +217,8 @@ func showHelp() {
 }
 
 // runTag creates a git tag
-func runTag() error {
+// runTagManual manually parses tag command to avoid Kong's -m conflict with Merge
+func runTagManual() error {
 	green := "\033[32m"
 	red := "\033[31m"
 	cyan := "\033[36m"
@@ -231,27 +226,34 @@ func runTag() error {
 	nc := "\033[0m"
 
 	runner := git.NewRunner()
-
-	// Parse tag arguments manually
 	args := os.Args
 	var tagVersion, tagMessage string
 	var pushTag bool
 
+	// Parse arguments manually
 	for i, arg := range args {
-		if arg == "-t" || arg == "--tag" {
-			if i+1 < len(args) {
-				tagVersion = args[i+1]
-				if strings.HasPrefix(tagVersion, "-") {
-					tagVersion = ""
+		switch arg {
+		case "-t", "--tag":
+			// Next non-flag argument is version
+			for j := i + 1; j < len(args); j++ {
+				next := args[j]
+				if strings.HasPrefix(next, "-") {
+					break
 				}
+				tagVersion = next
+				break
 			}
-		}
-		if arg == "-m" || arg == "--message" {
-			if i+1 < len(args) {
-				tagMessage = args[i+1]
+		case "-m", "--message":
+			// Next non-flag argument is message
+			for j := i + 1; j < len(args); j++ {
+				next := args[j]
+				if strings.HasPrefix(next, "-") {
+					break
+				}
+				tagMessage = next
+				break
 			}
-		}
-		if arg == "-p" || arg == "--push" {
+		case "-p", "--push":
 			pushTag = true
 		}
 	}
