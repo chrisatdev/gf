@@ -43,6 +43,7 @@ var CLI struct {
 	Finish    bool   `name:"finish" short:"F" help:"Finish and delete current branch (-f shortcut)"`
 	MR        bool   `name:"mr" short:"M" help:"Create MR"`
 	Tag       bool   `short:"t" help:"Create a tag (-t <version> [-m <message>] [-p])"`
+	Switch    string `short:"w" help:"Switch to a branch (-w name)"`
 	Help      bool   `short:"?" help:"Show this help"`
 
 	// Positional args (for add and mr)
@@ -162,6 +163,11 @@ func Execute() error {
 	// Tag
 	if CLI.Tag {
 		return runTag()
+	}
+
+	// Switch to branch
+	if CLI.Switch != "" {
+		return runSwitch(runner, CLI.Switch)
 	}
 
 	// No flags provided, show help
@@ -996,6 +1002,64 @@ func runMR(runner *git.Runner, source, target string) error {
 
 	// Return to original branch
 	runner.Checkout(currentBranch, false)
+
+	return nil
+}
+
+
+// runSwitch switches to a different branch
+func runSwitch(runner *git.Runner, branch string) error {
+	red := "\033[31m"
+	cyan := "\033[36m"
+	green := "\033[32m"
+	yellow := "\033[33m"
+	nc := "\033[0m"
+
+	if runner.HasChanges() {
+		fmt.Printf("%s⚠️  You have uncommitted changes. Stashing before switching...%s\n", yellow, nc)
+		runner.Command("stash", "push", "-u", "-m", "Auto-stash by gf before branch switch")
+	}
+
+	localBranches, _ := runner.LocalBranches()
+	branchExists := false
+	for _, b := range localBranches {
+		if b == branch {
+			branchExists = true
+			break
+		}
+	}
+
+	if !branchExists {
+		fmt.Printf("%s📥 Branch '%s' not found locally. Fetching from origin...%s\n", cyan, branch, nc)
+		cmd := exec.Command("git", "fetch", "origin", branch)
+		if err := cmd.Run(); err != nil {
+			if runner.HasChanges() {
+				fmt.Printf("%s💾 Restoring stashed changes...%s\n", cyan, nc)
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Branch '%s' not found%s\n", red, branch, nc)
+		}
+		if err := runner.Checkout(branch, false); err != nil {
+			if runner.HasChanges() {
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Failed to checkout branch '%s'%s\n", red, branch, nc)
+		}
+		fmt.Printf("%s✅ Switched to branch '%s'%s\n", green, branch, nc)
+	} else {
+		if err := runner.Checkout(branch, false); err != nil {
+			if runner.HasChanges() {
+				runner.Command("stash", "pop")
+			}
+			return fmt.Errorf("%s❌ Failed to switch to branch '%s'%s\n", red, branch, nc)
+		}
+		fmt.Printf("%s✅ Switched to branch '%s'%s\n", green, branch, nc)
+	}
+
+	behind, _ := runner.IsBehindRemote(branch)
+	if behind {
+		fmt.Printf("%s⚠️  Branch '%s' is behind origin. Run 'git pull'%s\n", yellow, branch, nc)
+	}
 
 	return nil
 }
