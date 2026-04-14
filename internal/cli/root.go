@@ -33,10 +33,10 @@ var CLI struct {
 	Init      bool   `short:"i" help:"Initialize new Git repository"`
 	Configure bool   `short:"c" help:"Configure existing repository (save main branch)"`
 	Status    bool   `short:"s" help:"Show git status"`
-	Feature   string `short:"f" help:"Create feature branch (-f name)"`
-	Hotfix    string `short:"h" help:"Create hotfix branch (-h name)"`
-	Bugfix    string `short:"b" help:"Create bugfix branch (-b name)"`
-	Release   string `short:"r" help:"Create release branch (-r name)"`
+	Feature   string `short:"f" help:"Create feature branch (use with -s: gf -s -f name)"`
+	Hotfix    string `short:"h" help:"Create hotfix branch (use with -s: gf -s -h name)"`
+	Bugfix    string `short:"b" help:"Create bugfix branch (use with -s: gf -s -b name)"`
+	Release   string `short:"r" help:"Create release branch (use with -s: gf -s -r name)"`
 	Add       bool   `short:"a" help:"Stage changes (-a or -a file1 file2)"`
 	Commit    bool   `short:"p" help:"Commit and push (-p or -p \"message\")"`
 	Merge     bool   `short:"m" help:"Merge main into current branch"`
@@ -45,6 +45,7 @@ var CLI struct {
 	Tag       bool   `short:"t" help:"Create a tag (-t <version> [-m <message>] [-p])"`
 	Switch    string `short:"w" help:"Switch to a branch (-w name)"`
 	Help      bool   `short:"?" help:"Show this help"`
+	PushOnly  bool   `short:"u" name:"push-only" help:"Push without creating MR/PR (use with -p)"`
 
 	// Positional args (for add and mr)
 	Args []string `arg optional name:"args" help:"Files to stage or MR source/target"`
@@ -58,7 +59,7 @@ type TagCmd struct {
 }
 
 // gfDir is the hidden directory for gf config
-const gfDir = ".gf"
+const gfDir = ".git/gf"
 
 // mainBranchFile stores the main branch name
 const mainBranchFile = "main_branch"
@@ -83,9 +84,8 @@ func Execute() error {
 		return runUpdate()
 	}
 
-	// Help flag
+	// Help flag - Kong handles this automatically, so just return to let Kong show help
 	if CLI.Help || len(os.Args) == 1 {
-		showHelp()
 		return nil
 	}
 
@@ -130,7 +130,7 @@ func Execute() error {
 	}
 
 	// Commit & Push
-	if CLI.Commit || flagProvided("-p") {
+	if CLI.Commit || CLI.PushOnly || flagProvided("-p") {
 		msg := ""
 		if len(CLI.Args) > 0 {
 			msg = CLI.Args[0]
@@ -170,8 +170,7 @@ func Execute() error {
 		return runSwitch(runner, CLI.Switch)
 	}
 
-	// No flags provided, show help
-	showHelp()
+	// No flags provided, let Kong show help
 	return nil
 }
 
@@ -513,14 +512,13 @@ func runInit(runner *git.Runner) error {
 		fmt.Printf("%s⚠️  Warning: Could not create initial commit: %v%s\n", yellow, err, nc)
 	}
 
-	// Save main branch info
-	mainBranch := detectMainBranch()
-	if err := saveMainBranch(mainBranch); err != nil {
+	// Also run configure to save main branch
+	fmt.Println()
+	if err := runConfigure(runner); err != nil {
 		fmt.Printf("%s⚠️  Warning: Could not save main branch config: %v%s\n", yellow, err, nc)
 	}
 
 	fmt.Printf("%s✅ Repository initialized with empty commit%s\n", green, nc)
-	fmt.Printf("%s📁 Main branch saved as: %s%s\n", green, mainBranch, nc)
 	return nil
 }
 
@@ -649,6 +647,16 @@ func runBranch(runner *git.Runner, branchType, name string) error {
 		fmt.Printf("%s⚠️  Couldn't pull from origin/%s. Using local %s branch%s\n", yellow, mainBranch, mainBranch, nc)
 	}
 
+	// Pull current branch if we're on a feature branch
+	currentBranch, _ := runner.CurrentBranch()
+	if currentBranch != mainBranch && currentBranch != "" {
+		fmt.Printf("%s📥 Pulling current branch %s...%s\n", green, currentBranch, nc)
+		runner.Fetch("origin")
+		if _, err := runner.Command("pull", "origin", currentBranch); err != nil {
+			fmt.Printf("%s⚠️  Couldn't pull from origin/%s%s\n", yellow, currentBranch, nc)
+		}
+	}
+
 	// Create new branch
 	fullName := fmt.Sprintf("%s/%s", branchType, name)
 	emoji := getBranchEmoji(branchType)
@@ -682,7 +690,6 @@ func getBranchEmoji(branchType string) string {
 func runAdd(runner *git.Runner, files []string) error {
 	green := "\033[32m"
 	red := "\033[31m"
-	cyan := "\033[36m"
 	yellow := "\033[33m"
 	nc := "\033[0m"
 
@@ -700,38 +707,31 @@ func runAdd(runner *git.Runner, files []string) error {
 
 	fmt.Printf("%s✅ Changes staged%s\n", green, nc)
 
-	// Ask if user wants to update CHANGELOG
-	fmt.Printf("\n%s📝 Update CHANGELOG.md with these changes? (y/N): %s", cyan, nc)
-	var response string
-	fmt.Scanln(&response)
+	// Automatically update CHANGELOG
+	changelog.EnsureExists()
 
-	if strings.ToLower(response) == "y" {
-		// Ensure CHANGELOG exists
-		changelog.EnsureExists()
+	// Get staged files info
+	newFiles, modFiles, delFiles, _, _ := runner.StagedFilesByStatus()
 
-		// Get staged files info
-		newFiles, modFiles, delFiles, _, _ := runner.StagedFilesByStatus()
+	// Generate commit message for changelog
+	var allFiles []string
+	allFiles = append(allFiles, newFiles...)
+	allFiles = append(allFiles, modFiles...)
+	allFiles = append(allFiles, delFiles...)
 
-		// Generate commit message for changelog
-		var allFiles []string
-		allFiles = append(allFiles, newFiles...)
-		allFiles = append(allFiles, modFiles...)
-		allFiles = append(allFiles, delFiles...)
+	if len(allFiles) > 0 {
+		gen := commit.NewGenerator()
+		info := gen.Generate(allFiles, "")
+		shortMsg := fmt.Sprintf("%s %s: %s", info.Emoji, info.Type, info.Description)
 
-		if len(allFiles) > 0 {
-			gen := commit.NewGenerator()
-			info := gen.Generate(allFiles, "")
-			shortMsg := fmt.Sprintf("%s %s: %s", info.Emoji, info.Type, info.Description)
+		commitType := info.Type
+		if err := changelog.AddEntry(commitType, shortMsg); err != nil {
+			fmt.Printf("%s⚠️  Warning: Could not update CHANGELOG: %v%s\n", yellow, err, nc)
+		} else {
+			fmt.Printf("%s✅ CHANGELOG.md updated automatically%s\n", green, nc)
 
-			commitType := info.Type
-			if err := changelog.AddEntry(commitType, shortMsg); err != nil {
-				fmt.Printf("%s⚠️  Warning: Could not update CHANGELOG: %v%s\n", yellow, err, nc)
-			} else {
-				fmt.Printf("%s✅ CHANGELOG.md updated%s\n", green, nc)
-
-				// Stage the changelog
-				runner.Add("CHANGELOG.md")
-			}
+			// Stage the changelog
+			runner.Add("CHANGELOG.md")
 		}
 	}
 
@@ -795,13 +795,15 @@ func runCommit(runner *git.Runner, message string) error {
 	}
 	fmt.Printf("%s✅ Push successful%s\n", green, nc)
 
-	// Open MR for non-main branches
-	if !isMain {
+	// Open MR for non-main branches (unless PushOnly is set)
+	if !isMain && !CLI.PushOnly {
 		url, _ := mr.GetMRURL(runner, currentBranch)
 		if url != "" {
 			fmt.Printf("%s🔗 Opening Merge Request...%s\n", cyan, nc)
 			openBrowser(url)
 		}
+	} else if CLI.PushOnly {
+		fmt.Printf("%s⏭️  Push only mode - skipping MR creation%s\n", yellow, nc)
 	} else {
 		fmt.Printf("%s⚠️  No MR will be created for %s branch%s\n", yellow, mainBranch, nc)
 	}
@@ -1005,7 +1007,6 @@ func runMR(runner *git.Runner, source, target string) error {
 
 	return nil
 }
-
 
 // runSwitch switches to a different branch
 func runSwitch(runner *git.Runner, branch string) error {

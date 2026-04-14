@@ -2,6 +2,10 @@
 
 ## [Unreleased] - septiembre 2025
 ### Documentation
+- docs: update documentation (12 files)
+
+- docs: update documentation (3 files)
+
 - docs: update documentation (2 files)
 
 - docs: update documentation (2 files)
