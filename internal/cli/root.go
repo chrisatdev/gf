@@ -68,7 +68,7 @@ const mainBranchFile = "main_branch"
 func Execute() error {
 	_ = kong.Parse(&CLI,
 		kong.Name("gf"),
-		kong.Description("Git Flow Enhanced - A powerful Git workflow automation tool"),
+		kong.Description(fmt.Sprintf("Git Flow Enhanced v%s - A powerful Git workflow automation tool\n\nby Christian Benítez - https://github.com/chrisatdev", Version)),
 		kong.HelpOptions{
 			Compact: true,
 		},
