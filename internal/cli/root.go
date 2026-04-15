@@ -46,6 +46,7 @@ var CLI struct {
 	Switch    string `short:"w" help:"Switch to a branch (-w name)"`
 	Help      bool   `short:"?" help:"Show this help"`
 	PushOnly  bool   `short:"u" name:"push-only" help:"Push without creating MR/PR (use with -p)"`
+	Pull      bool   `short:"P" help:"Pull current branch from origin"`
 
 	// Positional args (for add and mr)
 	Args []string `arg optional name:"args" help:"Files to stage or MR source/target"`
@@ -170,6 +171,11 @@ func Execute() error {
 		return runSwitch(runner, CLI.Switch)
 	}
 
+	// Pull current branch
+	if CLI.Pull {
+		return runPull(runner)
+	}
+
 	// No flags provided, let Kong show help
 	return nil
 }
@@ -192,7 +198,7 @@ func showHelp() {
 	purple := "\033[35m"
 	nc := "\033[0m"
 
-	fmt.Printf("%s🚀 Git Flow Enhanced (gf)%s\n", green, nc)
+	fmt.Printf("%s🚀 Git Flow Enhanced (gf) v%s%s\n", green, Version, nc)
 	fmt.Printf("%s Version: %s - by Christian Benítez%s\n", green, Version, nc)
 	fmt.Printf("%s GitHub: https://github.com/chrisatdev%s\n\n", green, nc)
 
@@ -206,7 +212,9 @@ func showHelp() {
 	fmt.Printf("  %sgf -s -r [name]%s              %s🚀%s Create release branch (release/name)\n", cyan, nc, blue, nc)
 	fmt.Printf("  %sgf -a%s                        %s📦%s Stage changes (stage all if no files specified)\n", cyan, nc, green, nc)
 	fmt.Printf("  %sgf -p \"[msg]\"%s                %s💾%s Commit (with message) and push, then open MR/PR\n", cyan, nc, green, nc)
+	fmt.Printf("  %sgf -u%s                        %s⏭️ %s Push only (no MR creation)\n", cyan, nc, green, nc)
 	fmt.Printf("  %sgf -m%s                        %s🔀%s Merge main into current branch (handle conflicts)\n", cyan, nc, green, nc)
+	fmt.Printf("  %sgf -P%s                        %s📥%s Pull current branch from origin\n", cyan, nc, green, nc)
 	fmt.Printf("  %sgf -F%s                        %s🗑️%s Finish and delete current branch (local & remote)\n", cyan, nc, red, nc)
 	fmt.Printf("  %sgf -M [source] [target]%s      %s🔄%s Create MR from source to target branch (GitLab)\n", cyan, nc, purple, nc)
 	fmt.Printf("  %sgf -t <version>%s             %s🏷️%s Create tag (e.g., gf -t v1.0.0)\n", cyan, nc, green, nc)
@@ -220,6 +228,8 @@ func showHelp() {
 	fmt.Printf("  %sgf -a%s\n", cyan, nc)
 	fmt.Printf("  %sgf -a file.txt%s\n", cyan, nc)
 	fmt.Printf("  %sgf -p \"feat: add new API endpoint\"%s\n", cyan, nc)
+	fmt.Printf("  %sgf -u%s\n", cyan, nc)
+	fmt.Printf("  %sgf -P%s\n", cyan, nc)
 	fmt.Printf("  %sgf -m%s\n", cyan, nc)
 	fmt.Printf("  %sgf -F%s\n", cyan, nc)
 	fmt.Printf("  %sgf -M main dev%s\n", cyan, nc)
@@ -1061,6 +1071,31 @@ func runSwitch(runner *git.Runner, branch string) error {
 	if behind {
 		fmt.Printf("%s⚠️  Branch '%s' is behind origin. Run 'git pull'%s\n", yellow, branch, nc)
 	}
+
+	return nil
+}
+
+// runPull pulls the current branch from origin
+func runPull(runner *git.Runner) error {
+	green := "\033[32m"
+	red := "\033[31m"
+	cyan := "\033[36m"
+	nc := "\033[0m"
+
+	currentBranch, err := runner.CurrentBranch()
+	if err != nil {
+		return fmt.Errorf("%s❌ Could not determine current branch: %v%s\n", red, err, nc)
+	}
+
+	fmt.Printf("%s📥 Pulling latest changes from origin/%s...%s\n", green, currentBranch, nc)
+
+	_, err = runner.Pull("origin", currentBranch)
+	if err != nil {
+		return fmt.Errorf("%s❌ Pull failed: %v%s\n", red, err, nc)
+	}
+
+	fmt.Printf("%s✅ Successfully pulled latest changes%s\n", green, nc)
+	fmt.Printf("%s💡 Current branch '%s' is now up to date%s\n", cyan, currentBranch, nc)
 
 	return nil
 }
