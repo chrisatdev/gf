@@ -56,6 +56,15 @@ func overrideLines(t *testing.T, files []string) {
 	t.Cleanup(func() { linesFn = orig })
 }
 
+// overrideOutput replaces outputFn to return a fixed string (used for rev-list).
+// Format: "<behind> <ahead>" e.g. "3 1"
+func overrideOutput(t *testing.T, out string) {
+	t.Helper()
+	orig := outputFn
+	outputFn = func(_ ...string) (string, error) { return out, nil }
+	t.Cleanup(func() { outputFn = orig })
+}
+
 func syncCfg() *config.Config {
 	return &config.Config{Repo: config.RepoConfig{MainBranch: "main"}}
 }
@@ -78,6 +87,7 @@ func TestExecute_BehindZero_AlreadyUpToDate(t *testing.T) {
 		AheadCount:  1,
 		BehindCount: 0,
 	})
+	overrideOutput(t, "0 1") // behind=0, ahead=1
 	gitCalls := overrideRun(t)
 
 	if err := Execute(syncCfg()); err != nil {
@@ -108,6 +118,7 @@ func TestExecute_BehindPositive_CleanMerge(t *testing.T) {
 		AheadCount:  1,
 		BehindCount: 3,
 	})
+	overrideOutput(t, "3 1") // behind=3, ahead=1
 	gitCalls := overrideRun(t)
 
 	if err := Execute(syncCfg()); err != nil {
@@ -137,6 +148,7 @@ func TestExecute_BehindPositive_WithConflicts(t *testing.T) {
 		AheadCount:  1,
 		BehindCount: 2,
 	})
+	overrideOutput(t, "2 1") // behind=2, ahead=1
 	overrideRunFailMerge(t)
 	overrideLines(t, []string{"internal/foo/foo.go", "README.md"})
 

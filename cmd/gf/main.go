@@ -116,7 +116,7 @@ func runStart(args []string) error {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i'.")
 		os.Exit(1)
 	}
 	branchType := args[0]
@@ -162,7 +162,7 @@ func runAdd(args []string) error {
 func runFinish() error {
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i'.")
 		os.Exit(1)
 	}
 	if err := finish.Execute(cfg, os.Stdin); err != nil {
@@ -175,7 +175,7 @@ func runFinish() error {
 func runMerge() error {
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i'.")
 		os.Exit(1)
 	}
 	if err := merge.Execute(cfg); err != nil {
@@ -211,7 +211,7 @@ func runUpdate() error {
 func runConfig() error {
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i'.")
 		os.Exit(1)
 	}
 	fmt.Println("gf configuration:")

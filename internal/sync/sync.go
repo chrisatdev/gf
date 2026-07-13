@@ -2,6 +2,8 @@ package sync
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/chrisatdev/gf/internal/config"
 	"github.com/chrisatdev/gf/internal/gitexec"
@@ -10,12 +12,31 @@ import (
 
 // injectable dependencies — override in tests.
 var (
-	inspectFn = gitrepo.Inspect
-	runFn     = gitexec.Run
-	linesFn   = gitexec.Lines
+	inspectFn    = gitrepo.Inspect
+	runFn        = gitexec.Run
+	linesFn      = gitexec.Lines
+	outputFn     = gitexec.Output
 )
 
-// Execute fetches origin, reports ahead/behind counts, and merges main when behind.
+// aheadBehind returns (ahead, behind) commit counts of HEAD relative to target ref.
+func aheadBehind(target string) (ahead, behind int, err error) {
+	out, err := outputFn("rev-list", "--left-right", "--count", target+"...HEAD")
+	if err != nil {
+		return 0, 0, err
+	}
+	parts := strings.Fields(strings.TrimSpace(out))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected rev-list output: %q", out)
+	}
+	b, err1 := strconv.Atoi(parts[0])
+	a, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0, fmt.Errorf("could not parse rev-list output: %q", out)
+	}
+	return a, b, nil
+}
+
+// Execute fetches origin, reports ahead/behind counts against origin/<main>, and merges main when behind.
 //
 // Scenarios:
 //
@@ -37,15 +58,21 @@ func Execute(cfg *config.Config) error {
 		return fmt.Errorf("gf sync: %w", err)
 	}
 
-	fmt.Printf("Your branch is %d commit(s) ahead and %d behind %s.\n",
-		state.AheadCount, state.BehindCount, cfg.Repo.MainBranch)
+	// Compute ahead/behind explicitly against origin/<main> (not @{u})
+	target := "origin/" + cfg.Repo.MainBranch
+	ahead, behind, err := aheadBehind(target)
+	if err != nil {
+		return fmt.Errorf("gf sync: %w", err)
+	}
 
-	if state.BehindCount == 0 {
+	fmt.Printf("Your branch is %d commit(s) ahead and %d behind %s.\n",
+		ahead, behind, cfg.Repo.MainBranch)
+
+	if behind == 0 {
 		fmt.Println("Already up to date.")
 		return nil
 	}
 
-	target := "origin/" + cfg.Repo.MainBranch
 	if mergeErr := runFn("merge", target, "--no-commit", "--no-ff"); mergeErr != nil {
 		conflicts, lErr := linesFn("diff", "--name-only", "--diff-filter=U")
 		if lErr == nil && len(conflicts) > 0 {
