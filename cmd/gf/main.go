@@ -12,6 +12,7 @@ import (
 	"github.com/chrisatdev/gf/internal/finish"
 	"github.com/chrisatdev/gf/internal/initcmd"
 	"github.com/chrisatdev/gf/internal/merge"
+	"github.com/chrisatdev/gf/internal/push"
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
 )
@@ -126,7 +127,19 @@ func runStart(args []string) error {
 }
 
 func runPush() error {
-	fmt.Println("[push]: not implemented yet")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No gf config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+	opts := push.Options{
+		Message:  flagMessage,
+		OnlyPush: flagOnlyPush,
+	}
+	if err := push.Execute(cfg, opts); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
