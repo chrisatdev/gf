@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chrisatdev/gf/internal/add"
 	"github.com/chrisatdev/gf/internal/config"
 )
 
@@ -115,8 +116,14 @@ func runPush() error {
 	return nil
 }
 
-func runAdd(_ []string) error {
-	fmt.Println("[add]: not implemented yet")
+func runAdd(args []string) error {
+	if err := add.Execute(args); err != nil {
+		return err
+	}
+	cmd := exec.Command("git", "diff", "--cached", "--stat")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run()
 	return nil
 }
 
