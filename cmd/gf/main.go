@@ -18,6 +18,7 @@ import (
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
 	gfsync "github.com/chrisatdev/gf/internal/sync"
+	"github.com/chrisatdev/gf/internal/update"
 )
 
 var version = "dev"
@@ -199,7 +200,10 @@ func runSwitch(args []string) error {
 }
 
 func runUpdate() error {
-	fmt.Println("[update]: not implemented yet")
+	if err := update.Execute(version); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
