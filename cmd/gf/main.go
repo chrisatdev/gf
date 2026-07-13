@@ -11,6 +11,7 @@ import (
 	"github.com/chrisatdev/gf/internal/config"
 	"github.com/chrisatdev/gf/internal/finish"
 	"github.com/chrisatdev/gf/internal/initcmd"
+	"github.com/chrisatdev/gf/internal/merge"
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
 )
@@ -154,7 +155,15 @@ func runFinish() error {
 }
 
 func runMerge() error {
-	fmt.Println("[merge]: not implemented yet")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+	if err := merge.Execute(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
