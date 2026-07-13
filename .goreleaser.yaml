@@ -1,0 +1,34 @@
+version: 2
+
+project_name: gf
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - binary: gf
+    main: ./cmd/gf
+    ldflags:
+      - -X github.com/chrisatdev/gf/cmd/gf.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "gf_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  github:
+    owner: chrisatdev
+    name: gf
