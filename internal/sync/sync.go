@@ -28,12 +28,12 @@ func Execute(cfg *config.Config) error {
 		return fmt.Errorf("No gf config found. Run 'gf -i' to initialize.")
 	}
 
-	state, err := inspectFn()
-	if err != nil {
+	if err := runFn("fetch", "origin"); err != nil {
 		return fmt.Errorf("gf sync: %w", err)
 	}
 
-	if err := runFn("fetch", "origin"); err != nil {
+	state, err := inspectFn()
+	if err != nil {
 		return fmt.Errorf("gf sync: %w", err)
 	}
 
