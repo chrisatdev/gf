@@ -4,4 +4,4 @@ dist/
 *.test
 *.out
 .env
-gf
+/gf
