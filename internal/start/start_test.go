@@ -29,7 +29,7 @@ func TestPrintHelp(t *testing.T) {
 	io.Copy(&buf, r)
 
 	out := buf.String()
-	for _, want := range []string{"feat", "bug", "fix", "iss", "task"} {
+	for _, want := range []string{"feat", "bug", "fix", "release"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("PrintHelp output missing %q\ngot: %s", want, out)
 		}

@@ -12,21 +12,19 @@ import (
 
 // BranchTypes maps type name to prefix.
 var BranchTypes = map[string]string{
-	"feat": "feat",
-	"bug":  "bug",
-	"fix":  "fix",
-	"iss":  "iss",
-	"task": "task",
+	"feat":    "feat",
+	"bug":     "bug",
+	"fix":     "fix",
+	"release": "release",
 }
 
 // PrintHelp prints the branch type table to stdout.
 func PrintHelp() {
-	fmt.Println("Branch types:")
-	fmt.Println("  feat   feat/<name>   New feature")
-	fmt.Println("  bug    bug/<name>    Bug fix")
-	fmt.Println("  fix    fix/<name>    Hotfix")
-	fmt.Println("  iss    iss/<name>    Issue")
-	fmt.Println("  task   task/<name>   Task")
+	fmt.Println("Branch types (use with -s):")
+	fmt.Println("  -f, --feature   feat/<name>     New feature")
+	fmt.Println("  -b, --bugfix    bug/<name>      Bug fix")
+	fmt.Println("  -x, --hotfix    fix/<name>      Hotfix")
+	fmt.Println("  -r, --release   release/<name>  Release branch")
 }
 
 // Execute creates a new branch of the given type with the given name.
@@ -34,7 +32,7 @@ func PrintHelp() {
 func Execute(cfg *config.Config, branchType, name string) error {
 	prefix, ok := BranchTypes[branchType]
 	if !ok {
-		return fmt.Errorf("unknown branch type %q. Valid types: feat, bug, fix, iss, task", branchType)
+		return fmt.Errorf("unknown branch type %q. Valid types: feat, bug, fix, release", branchType)
 	}
 
 	if name == "" {
