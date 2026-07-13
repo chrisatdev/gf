@@ -47,7 +47,7 @@ func TestRun_notGitRepo(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-git repo, got nil")
 	}
-	if !strings.Contains(err.Error(), "not a git repository") {
+	if !strings.Contains(err.Error(), "Not a git repository") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }

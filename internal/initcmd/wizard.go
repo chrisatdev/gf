@@ -13,7 +13,7 @@ import (
 )
 
 // ErrNotGitRepo is returned when the wizard is invoked outside a git repository.
-var ErrNotGitRepo = errors.New("not a git repository, run 'git init' first")
+var ErrNotGitRepo = errors.New("Not a git repository. Run 'git init' first.")
 
 // Run executes the interactive init wizard.
 // r is the input reader (os.Stdin in production, strings.NewReader in tests).
