@@ -13,8 +13,10 @@ import (
 	"github.com/chrisatdev/gf/internal/initcmd"
 	"github.com/chrisatdev/gf/internal/merge"
 	"github.com/chrisatdev/gf/internal/push"
+	"github.com/chrisatdev/gf/internal/resolve"
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
+	gfsync "github.com/chrisatdev/gf/internal/sync"
 )
 
 var version = "dev"
@@ -227,7 +229,11 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "sync current branch with origin main",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		fmt.Println("[sync]: not implemented yet")
+		cfg, _ := config.Load()
+		if err := gfsync.Execute(cfg); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 		return nil
 	},
 }
@@ -236,7 +242,10 @@ var resolveCmd = &cobra.Command{
 	Use:   "resolve",
 	Short: "interactively resolve merge conflicts",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		fmt.Println("[resolve]: not implemented yet")
+		if err := resolve.Execute(os.Stdin); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 		return nil
 	},
 }
