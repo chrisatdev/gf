@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/chrisatdev/gf/internal/add"
+	"github.com/chrisatdev/gf/internal/commit"
 	"github.com/chrisatdev/gf/internal/config"
 	"github.com/chrisatdev/gf/internal/finish"
 	"github.com/chrisatdev/gf/internal/initcmd"
@@ -220,7 +221,10 @@ var commitCmd = &cobra.Command{
 	Use:   "commit",
 	Short: "interactive conventional commit wizard",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		fmt.Println("[commit]: not implemented yet")
+		if err := commit.RunTUI(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 		return nil
 	},
 }
