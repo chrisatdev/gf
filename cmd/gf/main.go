@@ -43,6 +43,7 @@ var rootCmd = &cobra.Command{
 	Use:          "gf",
 	Short:        "Git Flow CLI — streamlined git workflow tool",
 	SilenceUsage: true,
+	Args:         cobra.ArbitraryArgs,
 	RunE:         dispatch,
 }
 
