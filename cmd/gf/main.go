@@ -9,6 +9,7 @@ import (
 
 	"github.com/chrisatdev/gf/internal/add"
 	"github.com/chrisatdev/gf/internal/config"
+	"github.com/chrisatdev/gf/internal/initcmd"
 )
 
 var version = "dev"
@@ -91,7 +92,10 @@ func runVersion() error {
 }
 
 func runInit() error {
-	fmt.Println("[init]: not implemented yet")
+	if err := initcmd.Run(os.Stdin); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
