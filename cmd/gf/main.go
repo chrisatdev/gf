@@ -10,6 +10,7 @@ import (
 	"github.com/chrisatdev/gf/internal/add"
 	"github.com/chrisatdev/gf/internal/config"
 	"github.com/chrisatdev/gf/internal/initcmd"
+	"github.com/chrisatdev/gf/internal/start"
 )
 
 var version = "dev"
@@ -101,17 +102,23 @@ func runInit() error {
 
 func runStart(args []string) error {
 	if len(args) == 0 {
-		fmt.Println("Usage: gf -s <type> <name>")
-		fmt.Println()
-		fmt.Println("Branch types:")
-		fmt.Println("  feat   new feature")
-		fmt.Println("  bug    bug fix")
-		fmt.Println("  fix    hotfix")
-		fmt.Println("  iss    issue")
-		fmt.Println("  task   chore/task")
+		start.PrintHelp()
 		return nil
 	}
-	fmt.Println("[start]: not implemented yet")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+	branchType := args[0]
+	name := ""
+	if len(args) > 1 {
+		name = args[1]
+	}
+	if err := start.Execute(cfg, branchType, name); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
