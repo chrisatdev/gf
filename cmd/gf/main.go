@@ -18,6 +18,7 @@ import (
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
 	gfsync "github.com/chrisatdev/gf/internal/sync"
+	"github.com/chrisatdev/gf/internal/tag"
 	"github.com/chrisatdev/gf/internal/update"
 )
 
@@ -35,8 +36,15 @@ var (
 	flagUpdate   bool
 	flagVersion  bool
 	flagConfig   bool
+	flagPull     bool
 	flagMessage  string
 	flagOnlyPush bool
+	flagFeature  string
+	flagBugfix   string
+	flagHotfix   string
+	flagRelease  string
+	flagTag      string
+	flagPushTag  bool
 )
 
 var rootCmd = &cobra.Command{
@@ -52,15 +60,22 @@ func init() {
 	rootCmd.Flags().BoolVarP(&flagStart, "start", "s", false, "start a new branch: gf -s <type> <name>")
 	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "commit, update changelog, and push")
 	rootCmd.Flags().BoolVarP(&flagAdd, "add", "a", false, "stage files (default: all)")
-	rootCmd.Flags().BoolVarP(&flagFinish, "finish", "f", false, "delete current branch locally and remotely")
+	rootCmd.Flags().BoolVarP(&flagFinish, "finish", "F", false, "delete current branch locally and remotely")
 	rootCmd.Flags().BoolVarP(&flagMerge, "merge", "m", false, "merge origin main into current branch")
 	rootCmd.Flags().BoolVarP(&flagStatus, "status", "S", false, "show git status")
 	rootCmd.Flags().BoolVarP(&flagSwitch, "switch", "w", false, "interactively switch branches")
 	rootCmd.Flags().BoolVarP(&flagUpdate, "update", "u", false, "self-update gf binary")
 	rootCmd.Flags().BoolVarP(&flagVersion, "version", "v", false, "print gf version")
 	rootCmd.Flags().BoolVarP(&flagConfig, "config", "c", false, "print current gf config")
+	rootCmd.Flags().BoolVarP(&flagPull, "pull", "P", false, "pull current branch from origin")
 	rootCmd.Flags().StringVarP(&flagMessage, "message", "M", "", "commit message for push")
 	rootCmd.Flags().BoolVar(&flagOnlyPush, "only-push", false, "push without creating PR/MR")
+	rootCmd.Flags().StringVarP(&flagFeature, "feature", "f", "", "create feature branch (use with -s)")
+	rootCmd.Flags().StringVarP(&flagBugfix, "bugfix", "b", "", "create bugfix branch (use with -s)")
+	rootCmd.Flags().StringVarP(&flagHotfix, "hotfix", "x", "", "create hotfix branch (use with -s)")
+	rootCmd.Flags().StringVarP(&flagRelease, "release", "r", "", "create release branch (use with -s)")
+	rootCmd.Flags().StringVarP(&flagTag, "tag", "t", "", "create a tag (e.g. gf -t v1.0.0)")
+	rootCmd.Flags().BoolVar(&flagPushTag, "push-tag", false, "push tag to origin after creating")
 
 	rootCmd.AddCommand(commitCmd)
 	rootCmd.AddCommand(syncCmd)
@@ -91,6 +106,10 @@ func dispatch(cmd *cobra.Command, args []string) error {
 		return runUpdate()
 	case flagConfig:
 		return runConfig()
+	case flagPull:
+		return runPull()
+	case flagTag != "":
+		return runTag()
 	default:
 		return cmd.Help()
 	}
@@ -110,21 +129,47 @@ func runInit() error {
 }
 
 func runStart(args []string) error {
-	if len(args) == 0 {
-		start.PrintHelp()
-		return nil
+	branchType, name := "", ""
+	switch {
+	case flagFeature != "":
+		branchType, name = "feat", flagFeature
+	case flagBugfix != "":
+		branchType, name = "bug", flagBugfix
+	case flagHotfix != "":
+		branchType, name = "fix", flagHotfix
+	case flagRelease != "":
+		branchType, name = "release", flagRelease
+	default:
+		if len(args) == 0 {
+			start.PrintHelp()
+			return nil
+		}
+		branchType = args[0]
+		if len(args) > 1 {
+			name = args[1]
+		}
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i'.")
 		os.Exit(1)
 	}
-	branchType := args[0]
-	name := ""
-	if len(args) > 1 {
-		name = args[1]
-	}
 	if err := start.Execute(cfg, branchType, name); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	return nil
+}
+
+func runPull() error {
+	cmd := exec.Command("git", "pull")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func runTag() error {
+	if err := tag.Create(flagTag, flagMessage, flagPushTag); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
