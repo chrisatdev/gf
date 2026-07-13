@@ -78,8 +78,8 @@ func TestRun_happyPath(t *testing.T) {
 	chdir(t, dir)
 
 	// No remote → DetectRemote fails → prompts for platform
-	// Input: platform=github, branch=main (default via empty), mfa=n
-	input := "github\n\nn\n"
+	// Input: choice=1 (github), branch=main (default via empty)
+	input := "1\n\n"
 	if err := Run(strings.NewReader(input)); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -106,8 +106,8 @@ func TestRun_reinitialize(t *testing.T) {
 	}
 	chdir(t, dir)
 
-	// Input: reinit=y, platform=github, branch=develop, mfa=y
-	input := "y\ngithub\ndevelop\ny\n"
+	// Input: reinit=y, choice=1 (github), branch=develop
+	input := "y\n1\ndevelop\n"
 	if err := Run(strings.NewReader(input)); err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestRun_reinitialize(t *testing.T) {
 	if cfg.Repo.MainBranch != "develop" {
 		t.Errorf("main_branch = %q, want %q", cfg.Repo.MainBranch, "develop")
 	}
-	if !cfg.Flow.MFAActive {
-		t.Error("mfa_active should be true")
+	if cfg.Flow.MFAActive {
+		t.Error("mfa_active should be false")
 	}
 }

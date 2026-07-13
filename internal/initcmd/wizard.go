@@ -44,15 +44,21 @@ func Run(r io.Reader) error {
 			projectPath = remote.ProjectPath
 		}
 		for {
-			fmt.Print("Platform (github/gitlab): ")
+			fmt.Print("  Platform:\n    1) GitHub\n    2) GitLab\n  Choice [1]: ")
 			if !scanner.Scan() {
 				return fmt.Errorf("gf init: unexpected end of input")
 			}
-			platform = strings.ToLower(strings.TrimSpace(scanner.Text()))
-			if platform == "github" || platform == "gitlab" {
-				break
+			choice := strings.TrimSpace(scanner.Text())
+			switch choice {
+			case "1", "":
+				platform = "github"
+			case "2":
+				platform = "gitlab"
+			default:
+				fmt.Printf("Invalid choice %q, enter 1 or 2\n", choice)
+				continue
 			}
-			fmt.Printf("Invalid platform %q, must be github or gitlab\n", platform)
+			break
 		}
 	} else {
 		fmt.Printf("Detected platform: %s (%s)\n", remote.Platform, remote.ProjectPath)
@@ -69,13 +75,6 @@ func Run(r io.Reader) error {
 		mainBranch = "main"
 	}
 
-	fmt.Print("MFA active? [y/N]: ")
-	if !scanner.Scan() {
-		return fmt.Errorf("gf init: unexpected end of input")
-	}
-	mfaInput := strings.TrimSpace(scanner.Text())
-	mfaActive := mfaInput == "y" || mfaInput == "Y"
-
 	if err := config.Write(&config.Config{
 		Repo: config.RepoConfig{
 			Platform:    platform,
@@ -83,7 +82,7 @@ func Run(r io.Reader) error {
 			ProjectPath: projectPath,
 		},
 		Flow: config.FlowConfig{
-			MFAActive: mfaActive,
+			MFAActive: false,
 		},
 	}); err != nil {
 		return fmt.Errorf("gf init: %w", err)
