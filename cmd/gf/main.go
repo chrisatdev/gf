@@ -9,8 +9,10 @@ import (
 
 	"github.com/chrisatdev/gf/internal/add"
 	"github.com/chrisatdev/gf/internal/config"
+	"github.com/chrisatdev/gf/internal/finish"
 	"github.com/chrisatdev/gf/internal/initcmd"
 	"github.com/chrisatdev/gf/internal/start"
+	"github.com/chrisatdev/gf/internal/switchcmd"
 )
 
 var version = "dev"
@@ -77,7 +79,7 @@ func dispatch(cmd *cobra.Command, args []string) error {
 	case flagStatus:
 		return runStatus()
 	case flagSwitch:
-		return runSwitch()
+		return runSwitch(args)
 	case flagUpdate:
 		return runUpdate()
 	case flagConfig:
@@ -139,7 +141,15 @@ func runAdd(args []string) error {
 }
 
 func runFinish() error {
-	fmt.Println("[finish]: not implemented yet")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+	if err := finish.Execute(cfg, os.Stdin); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	return nil
 }
 
@@ -155,9 +165,12 @@ func runStatus() error {
 	return cmd.Run()
 }
 
-func runSwitch() error {
-	fmt.Println("[switch]: not implemented yet")
-	return nil
+func runSwitch(args []string) error {
+	branch := ""
+	if len(args) > 0 {
+		branch = args[0]
+	}
+	return switchcmd.Execute(branch, os.Stdin)
 }
 
 func runUpdate() error {
