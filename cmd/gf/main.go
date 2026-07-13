@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/spf13/cobra"
+
+	"github.com/chrisatdev/gf/internal/config"
 )
 
 var version = "dev"
@@ -128,8 +131,10 @@ func runMerge() error {
 }
 
 func runStatus() error {
-	fmt.Println("[status]: not implemented yet")
-	return nil
+	cmd := exec.Command("git", "status")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func runSwitch() error {
@@ -143,7 +148,16 @@ func runUpdate() error {
 }
 
 func runConfig() error {
-	fmt.Println("[config]: not implemented yet")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+	fmt.Println("gf configuration:")
+	fmt.Printf("  platform:     %s\n", cfg.Repo.Platform)
+	fmt.Printf("  main_branch:  %s\n", cfg.Repo.MainBranch)
+	fmt.Printf("  project_path: %s\n", cfg.Repo.ProjectPath)
+	fmt.Printf("  mfa_active:   %v\n", cfg.Flow.MFAActive)
 	return nil
 }
 
