@@ -48,6 +48,11 @@ func Execute(cfg *config.Config, opts Options) error {
 
 	branch := state.Branch
 
+	// Never create MR/PR when pushing directly from the main branch
+	if branch == cfg.Repo.MainBranch {
+		opts.OnlyPush = true
+	}
+
 	// Only bail out when we have a confirmed upstream AND nothing is ahead/dirty.
 	// When there is no upstream tracking, let the push attempt set it via -u.
 	if !state.IsDirty && state.AheadCount == 0 && state.HasUpstream {

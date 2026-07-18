@@ -57,37 +57,103 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().BoolVarP(&flagInit, "init", "i", false, "initialize gf config in current repo")
-	rootCmd.Flags().BoolVarP(&flagStart, "start", "s", false, "start a new branch: gf -s <type> <name>")
-	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "commit, update changelog, and push")
-	rootCmd.Flags().BoolVarP(&flagAdd, "add", "a", false, "stage files (default: all)")
+	rootCmd.Flags().BoolVarP(&flagStart, "start", "s", false, "start a new branch (shows types if no flag given)")
+	rootCmd.Flags().BoolVarP(&flagPush, "push", "p", false, "commit if needed, update changelog and push")
+	rootCmd.Flags().BoolVarP(&flagAdd, "add", "a", false, "stage files (all if no paths given)")
 	rootCmd.Flags().BoolVarP(&flagFinish, "finish", "F", false, "delete current branch locally and remotely")
 	rootCmd.Flags().BoolVarP(&flagMerge, "merge", "m", false, "merge origin main into current branch")
 	rootCmd.Flags().BoolVarP(&flagStatus, "status", "S", false, "show git status")
-	rootCmd.Flags().BoolVarP(&flagSwitch, "switch", "w", false, "interactively switch branches")
+	rootCmd.Flags().BoolVarP(&flagSwitch, "switch", "w", false, "switch to another branch")
 	rootCmd.Flags().BoolVarP(&flagUpdate, "update", "u", false, "self-update gf binary")
 	rootCmd.Flags().BoolVarP(&flagVersion, "version", "v", false, "print gf version")
-	rootCmd.Flags().BoolVarP(&flagConfig, "config", "c", false, "print current gf config")
+	rootCmd.Flags().BoolVarP(&flagConfig, "config", "c", false, "print current gf configuration")
 	rootCmd.Flags().BoolVarP(&flagPull, "pull", "P", false, "pull current branch from origin")
-	rootCmd.Flags().StringVarP(&flagMessage, "message", "M", "", "commit message for push")
-	rootCmd.Flags().BoolVar(&flagOnlyPush, "only-push", false, "push without creating PR/MR")
-	rootCmd.Flags().StringVarP(&flagFeature, "feature", "f", "", "create feature branch (use with -s)")
-	rootCmd.Flags().StringVarP(&flagBugfix, "bugfix", "b", "", "create bugfix branch (use with -s)")
-	rootCmd.Flags().StringVarP(&flagHotfix, "hotfix", "x", "", "create hotfix branch (use with -s)")
-	rootCmd.Flags().StringVarP(&flagRelease, "release", "r", "", "create release branch (use with -s)")
+	rootCmd.Flags().StringVarP(&flagMessage, "message", "M", "", "commit message (use with -p or commit)")
+	rootCmd.Flags().BoolVar(&flagOnlyPush, "only-push", false, "push without opening PR/MR (use with -p)")
+	rootCmd.Flags().StringVarP(&flagFeature, "feature", "f", "", "create feature branch  feat/NAME  (use with -s)")
+	rootCmd.Flags().StringVarP(&flagBugfix, "bugfix", "b", "", "create bugfix branch   bug/NAME   (use with -s)")
+	rootCmd.Flags().StringVarP(&flagHotfix, "hotfix", "x", "", "create hotfix branch   fix/NAME   (use with -s)")
+	rootCmd.Flags().StringVarP(&flagRelease, "release", "r", "", "create release branch  release/NAME (use with -s)")
 	rootCmd.Flags().StringVarP(&flagTag, "tag", "t", "", "create a tag (e.g. gf -t v1.0.0)")
-	rootCmd.Flags().BoolVar(&flagPushTag, "push-tag", false, "push tag to origin after creating")
+	rootCmd.Flags().BoolVar(&flagPushTag, "push-tag", false, "push tag to origin (use with -t)")
 
 	rootCmd.AddCommand(commitCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(resolveCmd)
+
+	rootCmd.SetHelpFunc(helpFunc)
+}
+
+func helpFunc(_ *cobra.Command, _ []string) {
+	fmt.Printf(`gf — Git Flow CLI (%s)
+
+Usage:
+  gf [flags]
+  gf [command]
+
+Flags:
+
+  General:
+    -v, --version                 Print gf version
+    -c, --config                  Print current gf configuration
+    -i, --init                    Initialize gf config in current repo
+    -S, --status                  Show git status
+    -P, --pull                    Pull current branch from origin
+    -u, --update                  Self-update gf binary
+
+  Branching:
+    -s, --start                   Start a new branch (shows types if no flag given)
+        -f, --feature NAME        Create feature branch   feat/NAME
+        -b, --bugfix  NAME        Create bugfix branch    bug/NAME
+        -x, --hotfix  NAME        Create hotfix branch    fix/NAME
+        -r, --release NAME        Create release branch   release/NAME
+
+  Commit & Push:
+    -a, --add [paths]             Stage files (all if no paths given)
+    -p, --push                    Commit if needed, update changelog and push
+        -M, --message MSG         Commit message (use with -p)
+            --only-push           Push without opening PR/MR
+
+  Tags:
+    -t, --tag VERSION             Create a tag
+            --push-tag            Push tag to origin (use with -t)
+
+  Branch lifecycle:
+    -m, --merge                   Merge main into current branch
+    -w, --switch                  Switch to another branch
+    -F, --finish                  Delete current branch locally and remotely
+
+Commands:
+  commit                          Interactive conventional commit wizard
+  sync                            Sync current branch with origin/main
+  resolve                         Resolve merge conflicts interactively
+
+Use "gf [command] --help" for more information about a command.
+`, version)
 }
 
 func dispatch(cmd *cobra.Command, args []string) error {
-	switch {
-	case flagVersion:
+	// Commands that never require config
+	if flagVersion {
 		return runVersion()
-	case flagInit:
+	}
+	if flagInit {
 		return runInit()
+	}
+
+	// No flags set → show help
+	if cmd.Flags().NFlag() == 0 {
+		helpFunc(cmd, args)
+		return nil
+	}
+
+	// All workflow commands require an initialized config
+	if !config.Exists() {
+		fmt.Fprintln(os.Stderr, "No gf config found. Run 'gf -i' to initialize.")
+		os.Exit(1)
+	}
+
+	switch {
 	case flagStart:
 		return runStart(args)
 	case flagPush:
@@ -111,7 +177,8 @@ func dispatch(cmd *cobra.Command, args []string) error {
 	case flagTag != "":
 		return runTag()
 	default:
-		return cmd.Help()
+		helpFunc(cmd, args)
+		return nil
 	}
 }
 
