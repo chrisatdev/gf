@@ -50,6 +50,18 @@ func Lines(args ...string) ([]string, error) {
 	return lines, nil
 }
 
+// CombinedOutput executes a git command and returns trimmed stdout+stderr combined.
+// Useful for commands like git push that write remote messages (including MR URLs) to stderr.
+func CombinedOutput(args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	trimmed := strings.TrimSpace(string(out))
+	if err != nil {
+		return "", fmt.Errorf("gf gitexec: git %s: %s", strings.Join(args, " "), trimmed)
+	}
+	return trimmed, nil
+}
+
 // RunInDir executes a git command in the specified directory.
 func RunInDir(dir string, args ...string) error {
 	cmd := exec.Command("git", args...)

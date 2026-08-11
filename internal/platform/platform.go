@@ -11,6 +11,9 @@ import (
 // Shared by all platform implementations; override in tests.
 var gitRun = gitexec.Run
 
+// gitCombinedOutput captures combined stdout+stderr; used where remote output carries URLs.
+var gitCombinedOutput = gitexec.CombinedOutput
+
 // Platform abstracts push-related interactions with a remote hosting service.
 type Platform interface {
 	// Push pushes branch to the remote. title is used as the MR/PR title when

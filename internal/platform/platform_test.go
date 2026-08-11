@@ -20,6 +20,19 @@ func captureGitRun(t *testing.T) *[][]string {
 	return &calls
 }
 
+// captureGitCombinedOutput replaces gitCombinedOutput with a recorder that returns output.
+func captureGitCombinedOutput(t *testing.T, output string) *[][]string {
+	t.Helper()
+	var calls [][]string
+	orig := gitCombinedOutput
+	gitCombinedOutput = func(args ...string) (string, error) {
+		calls = append(calls, append([]string{}, args...))
+		return output, nil
+	}
+	t.Cleanup(func() { gitCombinedOutput = orig })
+	return &calls
+}
+
 // captureOpenURL replaces openURL with a recorder and restores it.
 func captureOpenURL(t *testing.T) *string {
 	t.Helper()
@@ -90,43 +103,55 @@ func TestNew(t *testing.T) {
 // --- GitLabPlatform ---
 
 func TestGitLabPush(t *testing.T) {
-	tests := []struct {
-		name     string
-		onlyPush bool
-		wantArgs []string
-	}{
-		{
-			"only_push performs plain tracked push",
-			true,
-			[]string{"push", "-u", "origin", "feat/x"},
-		},
-		{
-			"mr_push adds merge request push options",
-			false,
-			[]string{
-				"push", "-u", "origin", "feat/x",
-				"-o", "merge_request.create",
-				"-o", "merge_request.title=feat(x): add feature",
-				"-o", "merge_request.target=main",
-			},
-		},
-	}
+	t.Run("only_push performs plain tracked push", func(t *testing.T) {
+		calls := captureGitRun(t)
+		p := &GitLabPlatform{}
+		if err := p.Push("feat/x", "feat(x): add feature", "main", true); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		wantArgs := []string{"push", "-u", "origin", "feat/x"}
+		if len(*calls) != 1 || !equalArgs((*calls)[0], wantArgs) {
+			t.Errorf("git args = %v, want %v", *calls, [][]string{wantArgs})
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			calls := captureGitRun(t)
-			p := &GitLabPlatform{}
-			if err := p.Push("feat/x", "feat(x): add feature", "main", tt.onlyPush); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(*calls) != 1 {
-				t.Fatalf("expected 1 git call, got %d: %v", len(*calls), *calls)
-			}
-			if !equalArgs((*calls)[0], tt.wantArgs) {
-				t.Errorf("git args =\n  %v\nwant\n  %v", (*calls)[0], tt.wantArgs)
-			}
-		})
-	}
+	t.Run("mr_push opens MR URL from remote output", func(t *testing.T) {
+		const fakeURL = "https://gitlab.com/owner/repo/-/merge_requests/new"
+		fakeOutput := "remote: \nremote: To create a merge request for feat/x, visit:\nremote:   " + fakeURL + "\nremote: \n"
+		calls := captureGitCombinedOutput(t, fakeOutput)
+		openedURL := captureOpenURL(t)
+
+		p := &GitLabPlatform{}
+		if err := p.Push("feat/x", "feat(x): add feature", "main", false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		wantArgs := []string{
+			"push", "-u", "origin", "feat/x",
+			"-o", "merge_request.create",
+			"-o", "merge_request.title=feat(x): add feature",
+			"-o", "merge_request.target=main",
+		}
+		if len(*calls) != 1 || !equalArgs((*calls)[0], wantArgs) {
+			t.Errorf("git args = %v, want %v", *calls, [][]string{wantArgs})
+		}
+		if *openedURL != fakeURL {
+			t.Errorf("browser URL = %q, want %q", *openedURL, fakeURL)
+		}
+	})
+
+	t.Run("mr_push with no URL in output skips browser", func(t *testing.T) {
+		captureGitCombinedOutput(t, "remote: \nremote: Everything up-to-date\nremote: \n")
+		openedURL := captureOpenURL(t)
+
+		p := &GitLabPlatform{}
+		if err := p.Push("feat/x", "feat(x): add feature", "main", false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if *openedURL != "" {
+			t.Errorf("expected no browser open, got URL %q", *openedURL)
+		}
+	})
 }
 
 // --- GitHubPlatform ---

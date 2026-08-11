@@ -48,6 +48,23 @@ func TestLines_success(t *testing.T) {
 	}
 }
 
+func TestCombinedOutput_success(t *testing.T) {
+	out, err := CombinedOutput("--version")
+	if err != nil {
+		t.Fatalf("CombinedOutput(--version) unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(out, "git") {
+		t.Errorf("CombinedOutput(--version) = %q, want prefix %q", out, "git")
+	}
+}
+
+func TestCombinedOutput_invalidCommand(t *testing.T) {
+	_, err := CombinedOutput("invalid-command-that-does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for invalid git command, got nil")
+	}
+}
+
 func TestRunInDir_success(t *testing.T) {
 	dir := t.TempDir()
 	if err := RunInDir(dir, "--version"); err != nil {
