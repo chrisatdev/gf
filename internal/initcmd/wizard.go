@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/chrisatdev/gf/internal/config"
@@ -89,5 +90,33 @@ func Run(r io.Reader) error {
 	}
 
 	fmt.Println("Initialized gf config at .git/gf.toml")
+	if err := ensureGitignore(".atl/"); err != nil {
+		fmt.Printf("Warning: could not update .gitignore: %v\n", err)
+	}
 	return nil
+}
+
+// ensureGitignore appends entry to .gitignore if not already present.
+func ensureGitignore(entry string) error {
+	const path = ".gitignore"
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == entry {
+			return nil
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	prefix := ""
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		prefix = "\n"
+	}
+	_, err = fmt.Fprintf(f, "%s%s\n", prefix, entry)
+	return err
 }
