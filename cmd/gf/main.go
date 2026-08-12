@@ -14,6 +14,7 @@ import (
 	"github.com/chrisatdev/gf/internal/initcmd"
 	"github.com/chrisatdev/gf/internal/merge"
 	"github.com/chrisatdev/gf/internal/push"
+	"github.com/chrisatdev/gf/internal/release"
 	"github.com/chrisatdev/gf/internal/resolve"
 	"github.com/chrisatdev/gf/internal/start"
 	"github.com/chrisatdev/gf/internal/switchcmd"
@@ -80,6 +81,7 @@ func init() {
 	rootCmd.AddCommand(commitCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(resolveCmd)
+	rootCmd.AddCommand(releaseCmd)
 
 	rootCmd.SetHelpFunc(helpFunc)
 }
@@ -127,6 +129,7 @@ Commands:
   commit                          Interactive conventional commit wizard
   sync                            Sync current branch with origin/main
   resolve                         Resolve merge conflicts interactively
+  release [patch|minor|major]     Bump version, tag, and publish a release
 
 Use "gf [command] --help" for more information about a command.
 `, version)
@@ -332,6 +335,19 @@ func runConfig() error {
 	fmt.Printf("  project_path: %s\n", cfg.Repo.ProjectPath)
 	fmt.Printf("  mfa_active:   %v\n", cfg.Flow.MFAActive)
 	return nil
+}
+
+var releaseCmd = &cobra.Command{
+	Use:   "release [patch|minor|major]",
+	Short: "bump version, tag, and publish a release",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		if err := release.Execute(release.Options{Bump: args[0]}); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		return nil
+	},
 }
 
 var commitCmd = &cobra.Command{
