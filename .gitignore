@@ -5,3 +5,6 @@ dist/
 *.out
 .env
 /gf
+
+# skill registry cache
+.atl/
