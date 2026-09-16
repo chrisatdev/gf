@@ -99,11 +99,11 @@ func TestBuildBody(t *testing.T) {
 			want:      []string{"rename: old_name.go -> new_name.go"},
 		},
 		{
-			name:      "mixed changes",
-			porcelain: "M  internal/auth/auth.go\nA  internal/auth/auth_test.go\nD  internal/old/old.go",
+			name:      "multiple modified files use separate body lines",
+			porcelain: "M  internal/auth/auth.go\nM  internal/auth/auth_test.go\nD  internal/old/old.go",
 			want: []string{
 				"modify: internal/auth/auth.go",
-				"add: internal/auth/auth_test.go",
+				"modify: internal/auth/auth_test.go",
 				"remove: internal/old/old.go",
 			},
 		},
