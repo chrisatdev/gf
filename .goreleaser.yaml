@@ -10,7 +10,7 @@ builds:
   - binary: gf
     main: ./cmd/gf
     ldflags:
-      - -X github.com/chrisatdev/gf/cmd/gf.version={{ .Version }}
+      - -X main.version=v{{ .Version }}
     goos:
       - linux
       - darwin
